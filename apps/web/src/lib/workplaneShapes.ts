@@ -129,6 +129,7 @@ export function fallbackSolidColor(shape: WorkplaneShape) {
   if (shape.kind === "cone") return "#6e2786";
   if (shape.kind === "pyramid") return "#f2cf10";
   if (shape.kind === "gear") return "#6f7f8d";
+  if (shape.kind === "openGridBoard") return "#5b5ce2";
   return "#d41721";
 }
 
@@ -206,6 +207,12 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.gearType === b.gearType &&
     a.helixAngle === b.helixAngle &&
     a.helixQuality === b.helixQuality &&
+    a.gridWidth === b.gridWidth &&
+    a.gridHeight === b.gridHeight &&
+    a.boardType === b.boardType &&
+    a.chamferMode === b.chamferMode &&
+    a.connectorHoles === b.connectorHoles &&
+    a.screwMounting === b.screwMounting &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&

@@ -3,7 +3,7 @@
 import { Check, CloudUpload, Download, Eye, FolderOpen, X } from "lucide-react";
 import type manifoldModule from "manifold-3d";
 import type { ManifoldToplevel } from "manifold-3d";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { ADDITION, Brush, Evaluator, HOLLOW_INTERSECTION, HOLLOW_SUBTRACTION, INTERSECTION, SUBTRACTION, type CSGOperation } from "three-bvh-csg";
 import * as THREE from "three";
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
@@ -21,6 +21,7 @@ import { manifoldModuleSource } from "@/generated/manifoldModuleSource";
 import { manifoldWasmBase64 } from "@/generated/manifoldWasmBase64";
 import { sphereTessellation } from "@/lib/sphereTessellation";
 import { createGearGeometry } from "@/lib/gearGeometry";
+import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
 import { regularPolygonFootprintScale } from "@/lib/regularPolygonFootprint";
 import {
   ToolbarAlignIcon,
@@ -47,7 +48,7 @@ import {
   ToolbarUndoIcon,
   ToolbarVectorExportIcon,
 } from "./icons";
-import { WorkplaneViewport } from "./WorkplaneViewport";
+import { WorkplaneViewport, shapeGeometrySignature, sharedShapeGeometry } from "./WorkplaneViewport";
 import { SketchWorkspace, type SketchMeasurement, type SketchSelection, type SketchTool } from "./SketchWorkspace";
 import { EdgeModifierPanel } from "./workplane/EdgeModifierPanel";
 import {
@@ -91,7 +92,7 @@ import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceF
 import { findSketchOutlineIntersection } from "@/lib/sketchProfileValidation";
 import { buildSketchRevolveMesh, DEFAULT_SKETCH_REVOLVE_SETTINGS, normalizeSketchRevolveSettings, type SketchRevolveMesh } from "@/lib/sketchRevolve";
 import { exportSkfProject, SKF_MEDIA_TYPE } from "@/lib/skfProject";
-import { makeShapeFromAsset, sceneShape, toolbarShapeAssets, type ToolbarShapeAsset } from "@/lib/shapeCatalog";
+import { makeShapeFromAsset, sceneShape, toolbarShapeAssetGroups, type ToolbarShapeAsset, type ToolbarShapeAssetGroup } from "@/lib/shapeCatalog";
 import { importExtensionSupported } from "@/lib/importExtensions";
 import { importedShapeFromStl } from "@/lib/stlImport";
 import { exportMeshesToStl } from "@/lib/stlExport";
@@ -2120,7 +2121,34 @@ function createBooleanTextGeometry(shape: WorkplaneShape) {
   return geometry;
 }
 
+// Keyed by shapeGeometrySignature (the same signature WorkplaneViewport's live
+// render cache uses) so this can never drift out of sync with which shape
+// fields actually affect geometry -- see the OpenGrid Board workplaneShapesEqual
+// bug for what happens when a geometry-affecting field is missing from a cache
+// key. geometryMeshForShape is pure in shape's LOCAL (untransformed) frame, so
+// caching it here is safe regardless of the shape's position/rotation/host
+// transform, which meshForShape applies fresh afterward via transformMesh.
+const GEOMETRY_MESH_CACHE_LIMIT = 192;
+const geometryMeshForShapeCache = new Map<string, MeshData | null>();
+
 function geometryMeshForShape(shape: WorkplaneShape): MeshData | null {
+  const key = shapeGeometrySignature(shape);
+  if (geometryMeshForShapeCache.has(key)) {
+    const cached = geometryMeshForShapeCache.get(key) ?? null;
+    geometryMeshForShapeCache.delete(key);
+    geometryMeshForShapeCache.set(key, cached);
+    return cached;
+  }
+  const mesh = buildGeometryMeshForShape(shape);
+  geometryMeshForShapeCache.set(key, mesh);
+  if (geometryMeshForShapeCache.size > GEOMETRY_MESH_CACHE_LIMIT) {
+    const oldestKey = geometryMeshForShapeCache.keys().next().value;
+    if (oldestKey !== undefined) geometryMeshForShapeCache.delete(oldestKey);
+  }
+  return mesh;
+}
+
+function buildGeometryMeshForShape(shape: WorkplaneShape): MeshData | null {
   const width = shapeWidth(shape);
   const depth = shapeDepth(shape);
   const height = shape.height;
@@ -2182,6 +2210,27 @@ function geometryMeshForShape(shape: WorkplaneShape): MeshData | null {
       break;
     case "wedge":
       geometry = createBooleanWedgeGeometry(width, height, depth);
+      break;
+    case "openGridBoard":
+      // Reuses WorkplaneViewport's own live-scene cache (same shapeGeometrySignature
+      // key) instead of rebuilding independently -- this is the expensive
+      // (~2.3s, dominated by the outer-corner CSG subtraction) case, and
+      // whichever of the render path or this one runs first pays for it, the
+      // other gets a cache hit. sharedShapeGeometry's entry may be live in the
+      // 3D scene, and bufferGeometryToMeshData (below) both mutates
+      // (toNonIndexed/translate) and disposes whatever geometry it's given --
+      // so this clones first rather than handing it the shared geometry directly,
+      // which would otherwise dispose the geometry still being rendered.
+      geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () =>
+        createOpenGridBoardGeometry({
+          gridWidth: shape.gridWidth,
+          gridHeight: shape.gridHeight,
+          boardType: shape.boardType,
+          chamferMode: shape.chamferMode,
+          connectorHoles: shape.connectorHoles,
+          screwMounting: shape.screwMounting,
+        }),
+      ).clone();
       break;
     case "polygon":
       geometry = new THREE.CylinderGeometry(1, 1, height, 6);
@@ -9201,6 +9250,117 @@ function SketchReferenceIcon({ name }: { name: SketchReferenceIconName }) {
   );
 }
 
+const basicShapeGroups = toolbarShapeAssetGroups.filter((group) => group.category === "Basic Shapes");
+const openGridShapeGroups = toolbarShapeAssetGroups.filter((group) => group.category === "OpenGrid");
+
+function ShapeMenuButton({
+  label,
+  ariaLabel,
+  icon: Icon,
+  groups,
+  isOpen,
+  onToggle,
+  onAddShape,
+}: {
+  label: string;
+  ariaLabel: string;
+  icon: ComponentType;
+  groups: ToolbarShapeAssetGroup[];
+  isOpen: boolean;
+  onToggle: () => void;
+  onAddShape: (shape: ToolbarShapeAsset) => void;
+}) {
+  const touchShapeStartRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const suppressNextShapeClickRef = useRef(false);
+
+  return (
+    <div className="toolbar-section toolbar-shapes-section">
+      <div className="toolbar-section-label">{label}</div>
+      <div className="toolbar-section-tools">
+        <button className={`shape-menu-trigger ${isOpen ? "active" : ""}`} aria-label={ariaLabel} aria-expanded={isOpen} onClick={onToggle}>
+          <Icon />
+        </button>
+      </div>
+      {isOpen ? (
+        <div className="shape-menu-dropdown">
+          <div className="shape-menu-groups">
+            {groups.map((group) => (
+              <div className="shape-menu-group" key={group.category}>
+                <div className="shape-menu-title">{group.category}</div>
+                <div className="shape-menu-list">
+                  {group.shapes.map((shape) => (
+                    <button
+                      className="shape-menu-item"
+                      key={shape.id}
+                      type="button"
+                      draggable={false}
+                      onClick={() => {
+                        if (suppressNextShapeClickRef.current) {
+                          suppressNextShapeClickRef.current = false;
+                          return;
+                        }
+                        onAddShape(shape);
+                      }}
+                      onPointerDown={(event) => {
+                        if (event.pointerType === "touch") {
+                          touchShapeStartRef.current = { id: shape.id, x: event.clientX, y: event.clientY };
+                        }
+                      }}
+                      onPointerUp={(event) => {
+                        if (event.pointerType !== "touch") {
+                          return;
+                        }
+                        const start = touchShapeStartRef.current;
+                        touchShapeStartRef.current = null;
+                        if (!start || start.id !== shape.id || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) {
+                          return;
+                        }
+                        event.preventDefault();
+                        suppressNextShapeClickRef.current = true;
+                        window.setTimeout(() => {
+                          suppressNextShapeClickRef.current = false;
+                        }, 350);
+                        onAddShape(shape);
+                      }}
+                      onTouchStart={(event) => {
+                        const touch = event.changedTouches[0];
+                        if (touch) {
+                          touchShapeStartRef.current = { id: shape.id, x: touch.clientX, y: touch.clientY };
+                        }
+                      }}
+                      onTouchEnd={(event) => {
+                        const touch = event.changedTouches[0];
+                        const start = touchShapeStartRef.current;
+                        touchShapeStartRef.current = null;
+                        if (!touch || !start || start.id !== shape.id || Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > 8) {
+                          return;
+                        }
+                        event.preventDefault();
+                        suppressNextShapeClickRef.current = true;
+                        window.setTimeout(() => {
+                          suppressNextShapeClickRef.current = false;
+                        }, 350);
+                        onAddShape(shape);
+                      }}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "copy";
+                        event.dataTransfer.setData("application/x-sketchforge-shape", JSON.stringify(shape));
+                      }}
+                    >
+                      <img src={shape.menuIcon} alt="" draggable={false} />
+                      <span>{shape.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SecondaryToolbar({
   toolbarMode,
   onToolbarModeChange,
@@ -9305,15 +9465,15 @@ function SecondaryToolbar({
   onAddShape: (shape: ShapeAsset) => void;
 }) {
   const [shapesOpen, setShapesOpen] = useState(false);
+  const [openGridOpen, setOpenGridOpen] = useState(false);
   const [sketchCreateOpen, setSketchCreateOpen] = useState(false);
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const [visibilityMenuPosition, setVisibilityMenuPosition] = useState({ top: 0, left: 0 });
   const sketchCreateMenuRef = useRef<HTMLDivElement>(null);
   const visibilityMenuRef = useRef<HTMLDivElement>(null);
-  const touchShapeStartRef = useRef<{ id: string; x: number; y: number } | null>(null);
-  const suppressNextShapeClickRef = useRef(false);
   const selectToolbarMode = (mode: "geometry" | "sketch") => {
     setShapesOpen(false);
+    setOpenGridOpen(false);
     setSketchCreateOpen(false);
     setVisibilityOpen(false);
     onTopPanel(null);
@@ -9322,6 +9482,7 @@ function SecondaryToolbar({
   const addShapeFromMenu = (shape: ShapeAsset) => {
     onAddShape(shape);
     setShapesOpen(false);
+    setOpenGridOpen(false);
   };
   const startSketch = (operation: SketchOperation) => {
     setSketchCreateOpen(false);
@@ -9386,6 +9547,7 @@ function SecondaryToolbar({
       });
     }
     setShapesOpen(false);
+    setOpenGridOpen(false);
     setSketchCreateOpen(false);
     onTopPanel(null);
     setVisibilityOpen(true);
@@ -9468,92 +9630,32 @@ function SecondaryToolbar({
           <div className="toolbar-section-label">History</div>
           <div className="toolbar-section-tools">{leftTools.slice(4).map(renderToolButton)}</div>
         </div>
-        <div className="toolbar-section toolbar-shapes-section">
-          <div className="toolbar-section-label">Shapes</div>
-          <div className="toolbar-section-tools">
-            <button
-              className={`shape-menu-trigger ${shapesOpen ? "active" : ""}`}
-              aria-label="Add shape"
-              aria-expanded={shapesOpen}
-              onClick={() => {
-                setVisibilityOpen(false);
-                setShapesOpen((value) => !value);
-              }}
-            >
-              <ToolbarShapeAddIcon />
-            </button>
-          </div>
-          {shapesOpen ? (
-            <div className="shape-menu-dropdown">
-              <div className="shape-menu-title">Basic Shapes</div>
-              <div className="shape-menu-list">
-                {toolbarShapeAssets.map((shape) => (
-                  <button
-                    className="shape-menu-item"
-                    key={shape.id}
-                    type="button"
-                    draggable={false}
-                    onClick={() => {
-                      if (suppressNextShapeClickRef.current) {
-                        suppressNextShapeClickRef.current = false;
-                        return;
-                      }
-                      addShapeFromMenu(shape);
-                    }}
-                    onPointerDown={(event) => {
-                      if (event.pointerType === "touch") {
-                        touchShapeStartRef.current = { id: shape.id, x: event.clientX, y: event.clientY };
-                      }
-                    }}
-                    onPointerUp={(event) => {
-                      if (event.pointerType !== "touch") {
-                        return;
-                      }
-                      const start = touchShapeStartRef.current;
-                      touchShapeStartRef.current = null;
-                      if (!start || start.id !== shape.id || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) {
-                        return;
-                      }
-                      event.preventDefault();
-                      suppressNextShapeClickRef.current = true;
-                      window.setTimeout(() => {
-                        suppressNextShapeClickRef.current = false;
-                      }, 350);
-                      addShapeFromMenu(shape);
-                    }}
-                    onTouchStart={(event) => {
-                      const touch = event.changedTouches[0];
-                      if (touch) {
-                        touchShapeStartRef.current = { id: shape.id, x: touch.clientX, y: touch.clientY };
-                      }
-                    }}
-                    onTouchEnd={(event) => {
-                      const touch = event.changedTouches[0];
-                      const start = touchShapeStartRef.current;
-                      touchShapeStartRef.current = null;
-                      if (!touch || !start || start.id !== shape.id || Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > 8) {
-                        return;
-                      }
-                      event.preventDefault();
-                      suppressNextShapeClickRef.current = true;
-                      window.setTimeout(() => {
-                        suppressNextShapeClickRef.current = false;
-                      }, 350);
-                      addShapeFromMenu(shape);
-                    }}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "copy";
-                      event.dataTransfer.setData("application/x-sketchforge-shape", JSON.stringify(shape));
-                    }}
-                  >
-                    <img src={shape.menuIcon} alt="" draggable={false} />
-                    <span>{shape.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <ShapeMenuButton
+          label="Shapes"
+          ariaLabel="Add shape"
+          icon={ToolbarShapeAddIcon}
+          groups={basicShapeGroups}
+          isOpen={shapesOpen}
+          onToggle={() => {
+            setVisibilityOpen(false);
+            setOpenGridOpen(false);
+            setShapesOpen((value) => !value);
+          }}
+          onAddShape={addShapeFromMenu}
+        />
+        <ShapeMenuButton
+          label="Open Grid"
+          ariaLabel="Add OpenGrid shape"
+          icon={ToolbarShapeAddIcon}
+          groups={openGridShapeGroups}
+          isOpen={openGridOpen}
+          onToggle={() => {
+            setVisibilityOpen(false);
+            setShapesOpen(false);
+            setOpenGridOpen((value) => !value);
+          }}
+          onAddShape={addShapeFromMenu}
+        />
       </div>
       <div className="toolbar-spacer" />
       <div className="tool-group right">

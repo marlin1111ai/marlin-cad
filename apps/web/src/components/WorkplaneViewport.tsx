@@ -30,6 +30,7 @@ import { cadModifierPrimitiveForBakedShape, cadTransformFromMatrix, cadTransform
 import { createGearGeometry } from "@/lib/gearGeometry";
 import { parseMeasurementInput } from "@/lib/measurementUnits";
 import { createMoveDimensionOverlay, type MoveDimensionAxis, type MoveDimensionOverlayData } from "@/lib/moveDimensionLines";
+import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
 import {
   horizontalPlacementWorkplane,
   placementWorkplaneCoordinates,
@@ -871,7 +872,7 @@ function shapeMaterialSignature(shape: WorkplaneShape): string {
   });
 }
 
-function shapeGeometrySignature(shape: WorkplaneShape): string {
+export function shapeGeometrySignature(shape: WorkplaneShape): string {
   if (shape.groupedShapes?.length && !shape.importedMesh) {
     return JSON.stringify({
       kind: "group",
@@ -933,6 +934,12 @@ function shapeGeometrySignature(shape: WorkplaneShape): string {
     gearType: shape.gearType,
     helixAngle: shape.helixAngle,
     helixQuality: shape.helixQuality,
+    gridWidth: shape.gridWidth,
+    gridHeight: shape.gridHeight,
+    boardType: shape.boardType,
+    chamferMode: shape.chamferMode,
+    connectorHoles: shape.connectorHoles,
+    screwMounting: shape.screwMounting,
     text: shape.text,
     font: shape.font,
   });
@@ -6893,7 +6900,7 @@ function createRotateArc(center: THREE.Vector3, radius: number, start: number, e
   return new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
 }
 
-function sharedShapeGeometry(key: string, create: () => THREE.BufferGeometry) {
+export function sharedShapeGeometry(key: string, create: () => THREE.BufferGeometry) {
   const cached = sharedShapeGeometryCache.get(key);
   if (cached) {
     sharedShapeGeometryCache.delete(key);
@@ -7178,6 +7185,16 @@ function createShapeObject(
     case "wedge":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createWedgeGeometry(width, height, depth)), material, shape);
       break;
+    case "openGridBoard":
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createOpenGridBoardGeometry({
+        gridWidth: shape.gridWidth,
+        gridHeight: shape.gridHeight,
+        boardType: shape.boardType,
+        chamferMode: shape.chamferMode,
+        connectorHoles: shape.connectorHoles,
+        screwMounting: shape.screwMounting,
+      })), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7296,7 +7313,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {

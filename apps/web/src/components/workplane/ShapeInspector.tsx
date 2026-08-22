@@ -22,6 +22,19 @@ import {
   gearToothPitch,
 } from "@/lib/gearGeometry";
 import { displayStepFromMillimeters, displayToMillimeters, formatMeasurementNumber, lengthDisplayUnit, millimetersToDisplay, parseMeasurementInput } from "@/lib/measurementUnits";
+import {
+  DEFAULT_OPENGRID_GRID_HEIGHT,
+  DEFAULT_OPENGRID_GRID_WIDTH,
+  MAX_OPENGRID_GRID_UNITS,
+  MIN_OPENGRID_GRID_UNITS,
+  OPENGRID_TILE_SIZE,
+  normalizeOpenGridBoardType,
+  normalizeOpenGridChamferMode,
+  normalizeOpenGridConnectorHoles,
+  normalizeOpenGridScrewMounting,
+  normalizeOpenGridUnits,
+  openGridBoardThickness,
+} from "@/lib/openGridGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
@@ -185,6 +198,37 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Length", value: depth, min: MIN_SHAPE_SIZE, max: 160, onChange: setDepth },
       { label: "Width", value: width, min: MIN_SHAPE_SIZE, max: 160, onChange: setWidth },
       { label: "Height", value: shape.height, min: MIN_SHAPE_SIZE, max: 160, onChange: setHeight },
+    ];
+  }
+
+  if (shape.kind === "openGridBoard") {
+    const gridWidthUnits = normalizeOpenGridUnits(shape.gridWidth, DEFAULT_OPENGRID_GRID_WIDTH);
+    const gridHeightUnits = normalizeOpenGridUnits(shape.gridHeight, DEFAULT_OPENGRID_GRID_HEIGHT);
+    const boardType = normalizeOpenGridBoardType(shape.boardType);
+    const chamferMode = normalizeOpenGridChamferMode(shape.chamferMode);
+    const connectorHoles = normalizeOpenGridConnectorHoles(shape.connectorHoles);
+    const screwMounting = normalizeOpenGridScrewMounting(shape.screwMounting);
+    const setGridWidthUnits = (value: number) => {
+      const units = normalizeOpenGridUnits(Math.round(value), DEFAULT_OPENGRID_GRID_WIDTH);
+      const newWidth = units * OPENGRID_TILE_SIZE;
+      onUpdate({ gridWidth: units, width: newWidth, size: resizedShapeSize(newWidth, depth) }, { resizeAxis: "width" });
+    };
+    const setGridHeightUnits = (value: number) => {
+      const units = normalizeOpenGridUnits(Math.round(value), DEFAULT_OPENGRID_GRID_HEIGHT);
+      const newDepth = units * OPENGRID_TILE_SIZE;
+      onUpdate({ gridHeight: units, depth: newDepth, size: resizedShapeSize(width, newDepth) }, { resizeAxis: "depth" });
+    };
+    return [
+      { label: "Grid Width", value: gridWidthUnits, min: MIN_OPENGRID_GRID_UNITS, max: MAX_OPENGRID_GRID_UNITS, step: 1, onChange: setGridWidthUnits },
+      { label: "Grid Height", value: gridHeightUnits, min: MIN_OPENGRID_GRID_UNITS, max: MAX_OPENGRID_GRID_UNITS, step: 1, onChange: setGridHeightUnits },
+      // "lite"/"heavy" stay in OpenGridBoardType, openGridBoardThickness, and
+      // every geometry code path untouched -- only removed from this
+      // dropdown's own choice list, so an existing board of that type still
+      // loads/renders correctly, it just can't be newly selected here.
+      { type: "select", label: "Board Type", value: boardType, options: ["full"], onChange: (value) => onUpdate({ boardType: value as WorkplaneShape["boardType"], height: openGridBoardThickness(value) }, { resizeAxis: "height" }) },
+      { type: "select", label: "Chamfer Mode", value: chamferMode, options: ["everywhere", "corners", "none"], onChange: (value) => onUpdate({ chamferMode: value as WorkplaneShape["chamferMode"] }) },
+      { type: "select", label: "Connector Holes", value: connectorHoles ? "on" : "off", options: ["off", "on"], onChange: (value) => onUpdate({ connectorHoles: value === "on" }) },
+      { type: "select", label: "Screw Mounting", value: screwMounting, options: ["none", "corners", "everywhere"], onChange: (value) => onUpdate({ screwMounting: value as WorkplaneShape["screwMounting"] }) },
     ];
   }
 

@@ -2530,13 +2530,18 @@ button {
   border-bottom: 1px solid #dbe5ed;
 }
 
-.shape-menu-list {
+.shape-menu-groups {
   display: flex;
   max-height: min(608px, calc(100vh - 136px));
   flex-direction: column;
+  overflow-y: auto;
+}
+
+.shape-menu-list {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   padding: 8px;
-  overflow-y: auto;
 }
 
 .shape-menu-item {

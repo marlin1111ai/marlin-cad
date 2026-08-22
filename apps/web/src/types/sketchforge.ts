@@ -17,7 +17,8 @@ export type ShapeKind =
   | "wedge"
   | "polygon"
   | "icosahedron"
-  | "mesh";
+  | "mesh"
+  | "openGridBoard";
 
 export type ShapeAsset = {
   id: string;
@@ -113,6 +114,10 @@ export type SketchOperation = "extrude" | "revolve";
 
 export type GearType = "spur" | "helical" | "bevel";
 
+export type OpenGridBoardType = "full" | "lite" | "heavy";
+export type OpenGridChamferMode = "everywhere" | "corners" | "none";
+export type OpenGridScrewMounting = "none" | "corners" | "everywhere";
+
 export type SketchRevolveSettings = {
   startAngle: number;
   sweepAngle: number;
@@ -204,6 +209,12 @@ export type WorkplaneShape = {
   gearType?: GearType;
   helixAngle?: number;
   helixQuality?: number;
+  gridWidth?: number;
+  gridHeight?: number;
+  boardType?: OpenGridBoardType;
+  chamferMode?: OpenGridChamferMode;
+  connectorHoles?: boolean;
+  screwMounting?: OpenGridScrewMounting;
   text?: string;
   font?: string;
   importedMesh?: {

@@ -29,7 +29,7 @@ export const SKF_LIMITS = {
 
 const SHAPE_KINDS = new Set([
   "box", "cylinder", "sphere", "sketch", "scribble", "cone", "pyramid", "roof", "text", "roundRoof",
-  "halfSphere", "torus", "tube", "gear", "ring", "wedge", "polygon", "icosahedron", "mesh",
+  "halfSphere", "torus", "tube", "gear", "ring", "wedge", "polygon", "icosahedron", "mesh", "openGridBoard",
 ]);
 
 const FEATURE_TYPES = new Set([

@@ -1,24 +1,47 @@
 import { canonicalizeShape } from "@/lib/workplaneShapes";
 import { createLocalId } from "@/lib/localIds";
 import { DEFAULT_GEAR_CENTER_HOLE_SIZE, DEFAULT_GEAR_HELIX_ANGLE, DEFAULT_GEAR_HELIX_QUALITY, DEFAULT_GEAR_TEETH, DEFAULT_GEAR_TOOTH_SIZE, DEFAULT_GEAR_TYPE } from "@/lib/gearGeometry";
+import { DEFAULT_OPENGRID_BOARD_TYPE, DEFAULT_OPENGRID_CHAMFER_MODE, DEFAULT_OPENGRID_CONNECTOR_HOLES, DEFAULT_OPENGRID_GRID_HEIGHT, DEFAULT_OPENGRID_GRID_WIDTH, DEFAULT_OPENGRID_SCREW_MOUNTING, openGridBoardDimensions } from "@/lib/openGridGeometry";
 import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
 
-export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string };
+export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
+
+const BASIC_SHAPES_CATEGORY = "Basic Shapes";
+const OPENGRID_CATEGORY = "OpenGrid";
 
 export const toolbarShapeAssets: ToolbarShapeAsset[] = [
-  { id: "box", name: "Box", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "box", color: "#d41721" },
-  { id: "cylinder", name: "Cylinder", src: "assets/sketchforge/shape-icons-gray/cylinder.png", menuIcon: "assets/sketchforge/shape-icons-gray/cylinder.png", kind: "cylinder", color: "#d97813" },
-  { id: "sphere", name: "Sphere", src: "assets/sketchforge/shape-icons-gray/sphere.png", menuIcon: "assets/sketchforge/shape-icons-gray/sphere.png", kind: "sphere", color: "#0098c7" },
-  { id: "cone", name: "Cone", src: "assets/sketchforge/shape-icons-gray/cone.png", menuIcon: "assets/sketchforge/shape-icons-gray/cone.png", kind: "cone", color: "#6e2786" },
-  { id: "pyramid", name: "Pyramid", src: "assets/sketchforge/shape-icons-gray/pyramid.png", menuIcon: "assets/sketchforge/shape-icons-gray/pyramid.png", kind: "pyramid", color: "#f2cf10" },
-  { id: "wedge", name: "Wedge", src: "assets/sketchforge/shape-icons-gray/wedge.png", menuIcon: "assets/sketchforge/shape-icons-gray/wedge.png", kind: "wedge", color: "#33983d" },
-  { id: "text", name: "Text", src: "assets/sketchforge/shape-icons-gray/text.png", menuIcon: "assets/sketchforge/shape-icons-gray/text.png", kind: "text", color: "#cf101b" },
-  { id: "round-roof", name: "Round Roof", src: "assets/sketchforge/shape-icons-gray/round-roof.png", menuIcon: "assets/sketchforge/shape-icons-gray/round-roof.png", kind: "roundRoof", color: "#67c4ce" },
-  { id: "half-sphere", name: "Half Sphere", src: "assets/sketchforge/shape-icons-gray/half-sphere.png", menuIcon: "assets/sketchforge/shape-icons-gray/half-sphere.png", kind: "halfSphere", color: "#c9009a" },
-  { id: "torus", name: "Torus", src: "assets/sketchforge/shape-icons-gray/torus.png", menuIcon: "assets/sketchforge/shape-icons-gray/torus.png", kind: "torus", color: "#0098c7" },
-  { id: "tube", name: "Tube", src: "assets/sketchforge/shape-icons-gray/tube.png", menuIcon: "assets/sketchforge/shape-icons-gray/tube.png", kind: "tube", color: "#ce7013" },
-  { id: "gear", name: "Gear", src: "assets/sketchforge/gear-types/spur.png", menuIcon: "assets/sketchforge/gear-types/spur.png", kind: "gear", color: "#6f7f8d" },
+  { id: "box", name: "Box", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "box", color: "#d41721", category: BASIC_SHAPES_CATEGORY },
+  { id: "cylinder", name: "Cylinder", src: "assets/sketchforge/shape-icons-gray/cylinder.png", menuIcon: "assets/sketchforge/shape-icons-gray/cylinder.png", kind: "cylinder", color: "#d97813", category: BASIC_SHAPES_CATEGORY },
+  { id: "sphere", name: "Sphere", src: "assets/sketchforge/shape-icons-gray/sphere.png", menuIcon: "assets/sketchforge/shape-icons-gray/sphere.png", kind: "sphere", color: "#0098c7", category: BASIC_SHAPES_CATEGORY },
+  { id: "cone", name: "Cone", src: "assets/sketchforge/shape-icons-gray/cone.png", menuIcon: "assets/sketchforge/shape-icons-gray/cone.png", kind: "cone", color: "#6e2786", category: BASIC_SHAPES_CATEGORY },
+  { id: "pyramid", name: "Pyramid", src: "assets/sketchforge/shape-icons-gray/pyramid.png", menuIcon: "assets/sketchforge/shape-icons-gray/pyramid.png", kind: "pyramid", color: "#f2cf10", category: BASIC_SHAPES_CATEGORY },
+  { id: "wedge", name: "Wedge", src: "assets/sketchforge/shape-icons-gray/wedge.png", menuIcon: "assets/sketchforge/shape-icons-gray/wedge.png", kind: "wedge", color: "#33983d", category: BASIC_SHAPES_CATEGORY },
+  { id: "text", name: "Text", src: "assets/sketchforge/shape-icons-gray/text.png", menuIcon: "assets/sketchforge/shape-icons-gray/text.png", kind: "text", color: "#cf101b", category: BASIC_SHAPES_CATEGORY },
+  { id: "round-roof", name: "Round Roof", src: "assets/sketchforge/shape-icons-gray/round-roof.png", menuIcon: "assets/sketchforge/shape-icons-gray/round-roof.png", kind: "roundRoof", color: "#67c4ce", category: BASIC_SHAPES_CATEGORY },
+  { id: "half-sphere", name: "Half Sphere", src: "assets/sketchforge/shape-icons-gray/half-sphere.png", menuIcon: "assets/sketchforge/shape-icons-gray/half-sphere.png", kind: "halfSphere", color: "#c9009a", category: BASIC_SHAPES_CATEGORY },
+  { id: "torus", name: "Torus", src: "assets/sketchforge/shape-icons-gray/torus.png", menuIcon: "assets/sketchforge/shape-icons-gray/torus.png", kind: "torus", color: "#0098c7", category: BASIC_SHAPES_CATEGORY },
+  { id: "tube", name: "Tube", src: "assets/sketchforge/shape-icons-gray/tube.png", menuIcon: "assets/sketchforge/shape-icons-gray/tube.png", kind: "tube", color: "#ce7013", category: BASIC_SHAPES_CATEGORY },
+  { id: "gear", name: "Gear", src: "assets/sketchforge/gear-types/spur.png", menuIcon: "assets/sketchforge/gear-types/spur.png", kind: "gear", color: "#6f7f8d", category: BASIC_SHAPES_CATEGORY },
+  // No dedicated icon asset exists yet for the openGrid board -- reusing the
+  // box icon as the closest stand-in for a flat plate until one is made.
+  { id: "opengrid-board", name: "OpenGrid Board", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "openGridBoard", color: "#5b5ce2", category: OPENGRID_CATEGORY },
 ];
+
+export type ToolbarShapeAssetGroup = { category: string; shapes: ToolbarShapeAsset[] };
+
+export const toolbarShapeAssetGroups: ToolbarShapeAssetGroup[] = (() => {
+  const order: string[] = [];
+  const byCategory = new Map<string, ToolbarShapeAsset[]>();
+  toolbarShapeAssets.forEach((shape) => {
+    const category = shape.category ?? BASIC_SHAPES_CATEGORY;
+    if (!byCategory.has(category)) {
+      order.push(category);
+      byCategory.set(category, []);
+    }
+    byCategory.get(category)!.push(shape);
+  });
+  return order.map((category) => ({ category, shapes: byCategory.get(category)! }));
+})();
 
 export function sceneShape(shape: Partial<WorkplaneShape> & Pick<WorkplaneShape, "name" | "kind" | "color">): WorkplaneShape {
   const width = shape.width ?? shape.size ?? 20;
@@ -74,10 +97,11 @@ export function sceneShape(shape: Partial<WorkplaneShape> & Pick<WorkplaneShape,
 export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: number; elevation?: number }): WorkplaneShape {
   const roundProfile = asset.kind === "sphere" || asset.kind === "torus" || asset.kind === "ring" || asset.kind === "halfSphere";
   const flatProfile = asset.kind === "torus" || asset.kind === "ring" || asset.kind === "text" || asset.kind === "gear";
+  const openGridBoardDefaults = asset.kind === "openGridBoard" ? openGridBoardDimensions(DEFAULT_OPENGRID_GRID_WIDTH, DEFAULT_OPENGRID_GRID_HEIGHT, DEFAULT_OPENGRID_BOARD_TYPE) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = asset.kind === "text" ? 86 : size;
-  const depth = asset.kind === "text" ? 28 : size;
+  const height = openGridBoardDefaults ? openGridBoardDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = openGridBoardDefaults ? openGridBoardDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : asset.kind === "text" ? 28 : size;
 
   return {
     id: createLocalId(asset.id),
@@ -110,6 +134,12 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     gearType: asset.kind === "gear" ? DEFAULT_GEAR_TYPE : undefined,
     helixAngle: asset.kind === "gear" ? DEFAULT_GEAR_HELIX_ANGLE : undefined,
     helixQuality: asset.kind === "gear" ? DEFAULT_GEAR_HELIX_QUALITY : undefined,
+    gridWidth: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_GRID_WIDTH : undefined,
+    gridHeight: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_GRID_HEIGHT : undefined,
+    boardType: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_BOARD_TYPE : undefined,
+    chamferMode: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_CHAMFER_MODE : undefined,
+    connectorHoles: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_CONNECTOR_HOLES : undefined,
+    screwMounting: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_SCREW_MOUNTING : undefined,
     locked: false,
     hidden: false,
   };
