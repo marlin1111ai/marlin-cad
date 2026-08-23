@@ -35,6 +35,27 @@ import {
   normalizeOpenGridUnits,
   openGridBoardThickness,
 } from "@/lib/openGridGeometry";
+import {
+  DEFAULT_OPENCONNECT_INTERNAL_DEPTH,
+  DEFAULT_OPENCONNECT_INTERNAL_HEIGHT,
+  DEFAULT_OPENCONNECT_INTERNAL_WIDTH,
+  MAX_OPENCONNECT_BASE_THICKNESS,
+  MAX_OPENCONNECT_DIMENSION,
+  MAX_OPENCONNECT_WALL_THICKNESS,
+  MIN_OPENCONNECT_BASE_THICKNESS,
+  MIN_OPENCONNECT_DIMENSION,
+  MIN_OPENCONNECT_WALL_THICKNESS,
+  normalizeCornerRounding,
+  normalizeOpenConnectBaseThickness,
+  normalizeOpenConnectDimension,
+  normalizeOpenConnectShapeType,
+  normalizeOpenConnectWallEnabled,
+  normalizeOpenConnectWallThickness,
+  normalizeSlotLockDistribution,
+  normalizeSlotPosition,
+  openConnectContainerDimensions,
+} from "@/lib/openConnectContainerGeometry";
+import { normalizeOpenGridSnapBoardType, normalizeOpenGridSnapBodyShape, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
@@ -85,6 +106,7 @@ type RangePropertyConfig = {
   min: number;
   max: number;
   step?: number;
+  disabled?: boolean;
   onChange: (value: number) => void;
 };
 
@@ -117,7 +139,7 @@ function formatPropertyNumber(value: number, accuracy: MeasurementAccuracy, step
 }
 
 function propertyUsesLengthUnit(label: string) {
-  return ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole"].includes(label);
+  return ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness"].includes(label);
 }
 
 function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdate): ShapePropertyConfig[] {
@@ -229,6 +251,95 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { type: "select", label: "Chamfer Mode", value: chamferMode, options: ["everywhere", "corners", "none"], onChange: (value) => onUpdate({ chamferMode: value as WorkplaneShape["chamferMode"] }) },
       { type: "select", label: "Connector Holes", value: connectorHoles ? "on" : "off", options: ["off", "on"], onChange: (value) => onUpdate({ connectorHoles: value === "on" }) },
       { type: "select", label: "Screw Mounting", value: screwMounting, options: ["none", "corners", "everywhere"], onChange: (value) => onUpdate({ screwMounting: value as WorkplaneShape["screwMounting"] }) },
+    ];
+  }
+
+  if (shape.kind === "openConnectContainer") {
+    const containerShapeType = normalizeOpenConnectShapeType(shape.containerShapeType);
+    const internalWidth = normalizeOpenConnectDimension(shape.internalWidth, DEFAULT_OPENCONNECT_INTERNAL_WIDTH);
+    const internalHeight = normalizeOpenConnectDimension(shape.internalHeight, DEFAULT_OPENCONNECT_INTERNAL_HEIGHT);
+    const internalDepth = normalizeOpenConnectDimension(shape.internalDepth, DEFAULT_OPENCONNECT_INTERNAL_DEPTH);
+    const wallThickness = normalizeOpenConnectWallThickness(shape.wallThickness);
+    const baseThickness = normalizeOpenConnectBaseThickness(shape.baseThickness);
+    const leftWallEnabled = normalizeOpenConnectWallEnabled(shape.leftWallEnabled);
+    const rightWallEnabled = normalizeOpenConnectWallEnabled(shape.rightWallEnabled);
+    const frontWallEnabled = normalizeOpenConnectWallEnabled(shape.frontWallEnabled);
+    const bottomWallEnabled = normalizeOpenConnectWallEnabled(shape.bottomWallEnabled);
+    const slotPosition = normalizeSlotPosition(shape.slotPosition);
+    const slotLockDistribution = normalizeSlotLockDistribution(shape.slotLockDistribution);
+    const cornerRounding = normalizeCornerRounding(shape.cornerRounding);
+
+    // Any change that affects the overall envelope re-derives width/height/depth
+    // from the same openConnectContainerDimensions the geometry builder itself
+    // uses, mirroring the board's own gridWidth/gridHeight -> width/depth pattern.
+    const applyContainerPatch = (patch: Partial<WorkplaneShape>) => {
+      const merged: WorkplaneShape = { ...shape, ...patch };
+      const dims = openConnectContainerDimensions({
+        shapeType: merged.containerShapeType,
+        internalWidth: merged.internalWidth,
+        internalHeight: merged.internalHeight,
+        internalDepth: merged.internalDepth,
+        wallThickness: merged.wallThickness,
+        baseThickness: merged.baseThickness,
+        leftWallEnabled: merged.leftWallEnabled,
+        rightWallEnabled: merged.rightWallEnabled,
+        frontWallEnabled: merged.frontWallEnabled,
+        bottomWallEnabled: merged.bottomWallEnabled,
+      });
+      onUpdate({ ...patch, width: dims.width, height: dims.height, depth: dims.depth, size: resizedShapeSize(dims.width, dims.depth) }, { resizeAxis: "width" });
+    };
+
+    const properties: ShapePropertyConfig[] = [
+      { type: "select", label: "Shape Type", value: containerShapeType, options: ["Bin", "Shelf"], onChange: (value) => applyContainerPatch({ containerShapeType: value as WorkplaneShape["containerShapeType"] }) },
+      { label: "Internal Width", value: internalWidth, min: MIN_OPENCONNECT_DIMENSION, max: MAX_OPENCONNECT_DIMENSION, onChange: (value) => applyContainerPatch({ internalWidth: value }) },
+    ];
+    if (containerShapeType === "Bin") {
+      properties.push({ label: "Internal Height", value: internalHeight, min: MIN_OPENCONNECT_DIMENSION, max: MAX_OPENCONNECT_DIMENSION, onChange: (value) => applyContainerPatch({ internalHeight: value }) });
+    }
+    properties.push({ label: "Internal Depth", value: internalDepth, min: MIN_OPENCONNECT_DIMENSION, max: MAX_OPENCONNECT_DIMENSION, onChange: (value) => applyContainerPatch({ internalDepth: value }) });
+    properties.push({ label: "Wall Thickness", value: wallThickness, min: MIN_OPENCONNECT_WALL_THICKNESS, max: MAX_OPENCONNECT_WALL_THICKNESS, onChange: (value) => applyContainerPatch({ wallThickness: value }) });
+    // Meaningless with no base to apply it to -- greyed out (not removed) so
+    // its own last value is still visible/preserved if Base Wall gets
+    // switched back on, same "disable in place" treatment as other
+    // now-irrelevant-but-not-destroyed settings elsewhere in the inspector.
+    properties.push({ label: "Base Thickness", value: baseThickness, min: MIN_OPENCONNECT_BASE_THICKNESS, max: MAX_OPENCONNECT_BASE_THICKNESS, disabled: containerShapeType === "Bin" && !bottomWallEnabled, onChange: (value) => applyContainerPatch({ baseThickness: value }) });
+    if (containerShapeType === "Bin") {
+      properties.push({ type: "select", label: "Left Wall", value: leftWallEnabled ? "on" : "off", options: ["off", "on"], onChange: (value) => applyContainerPatch({ leftWallEnabled: value === "on" }) });
+      properties.push({ type: "select", label: "Right Wall", value: rightWallEnabled ? "on" : "off", options: ["off", "on"], onChange: (value) => applyContainerPatch({ rightWallEnabled: value === "on" }) });
+      properties.push({ type: "select", label: "Front Wall", value: frontWallEnabled ? "on" : "off", options: ["off", "on"], onChange: (value) => applyContainerPatch({ frontWallEnabled: value === "on" }) });
+      // The back wall (slot cutouts) is never toggleable -- it's required
+      // for the container to mount at all. All 4 of these CAN go off
+      // together (a flat back plate with no base/sides/front is a
+      // legitimate configuration, basically what openconnect_plate.scad
+      // produces on its own) -- deliberately not blocked, just not implied
+      // as the "normal" state by any of these controls individually.
+      properties.push({ type: "select", label: "Base Wall", value: bottomWallEnabled ? "on" : "off", options: ["off", "on"], onChange: (value) => applyContainerPatch({ bottomWallEnabled: value === "on" }) });
+    }
+    properties.push({ type: "select", label: "Slot Position", value: slotPosition, options: ["All", "Staggered", "Edge Rows", "Edge Columns", "Corners"], onChange: (value) => onUpdate({ slotPosition: value as WorkplaneShape["slotPosition"] }) });
+    properties.push({ type: "select", label: "Slot Lock", value: slotLockDistribution, options: ["All", "Staggered", "Corners", "Top Corners", "None"], onChange: (value) => onUpdate({ slotLockDistribution: value as WorkplaneShape["slotLockDistribution"] }) });
+    properties.push({ type: "select", label: "Corner Rounding", value: cornerRounding, options: ["None", "Chamfer", "Fillet"], onChange: (value) => onUpdate({ cornerRounding: value as WorkplaneShape["cornerRounding"] }) });
+    return properties;
+  }
+
+  if (shape.kind === "openGridSnap") {
+    const boardType = normalizeOpenGridSnapBoardType(shape.boardType);
+    const snapBodyShape = normalizeOpenGridSnapBodyShape(shape.snapBodyShape);
+
+    // Unlike the board's own "Board Type" dropdown above (deliberately
+    // narrowed to just "full"), both "full" and "lite" are offered here --
+    // both have a baked, watertightness-checked mesh (see
+    // openGridSnapGeometry.ts); "heavy" has neither an upstream-supported
+    // snap_thickness nor a real board groove to snap into yet, so it never
+    // appears as a choice.
+    const applySnapPatch = (patch: Partial<WorkplaneShape>) => {
+      const merged: WorkplaneShape = { ...shape, ...patch };
+      const dims = openGridSnapDimensions(merged.boardType, merged.snapBodyShape);
+      onUpdate({ ...patch, width: dims.width, height: dims.height, depth: dims.depth, size: resizedShapeSize(dims.width, dims.depth) }, { resizeAxis: "width" });
+    };
+
+    return [
+      { type: "select", label: "Board Type", value: boardType, options: ["full", "lite"], onChange: (value) => applySnapPatch({ boardType: value as WorkplaneShape["boardType"] }) },
+      { type: "select", label: "Body Shape", value: snapBodyShape, options: ["Directional", "Symmetric"], onChange: (value) => applySnapPatch({ snapBodyShape: value as WorkplaneShape["snapBodyShape"] }) },
     ];
   }
 
@@ -622,7 +733,11 @@ function ShapePropertyRows({
     if (property.type === "select") {
       return <SelectProperty key={property.label} {...property} disabled={disabled} />;
     }
-    return <RangeProperty key={property.label} {...property} workspace={workspace} disabled={disabled} onInteractionActiveChange={onInteractionActiveChange} />;
+    // property.disabled (e.g. Base Thickness with Base Wall off) is a
+    // per-property state, distinct from this row group's own `disabled`
+    // (the shape's locked state) -- either should disable the control, so
+    // combine rather than let the row-level prop silently override it.
+    return <RangeProperty key={property.label} {...property} workspace={workspace} disabled={disabled || property.disabled} onInteractionActiveChange={onInteractionActiveChange} />;
   });
 }
 

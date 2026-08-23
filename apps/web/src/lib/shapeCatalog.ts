@@ -2,6 +2,19 @@ import { canonicalizeShape } from "@/lib/workplaneShapes";
 import { createLocalId } from "@/lib/localIds";
 import { DEFAULT_GEAR_CENTER_HOLE_SIZE, DEFAULT_GEAR_HELIX_ANGLE, DEFAULT_GEAR_HELIX_QUALITY, DEFAULT_GEAR_TEETH, DEFAULT_GEAR_TOOTH_SIZE, DEFAULT_GEAR_TYPE } from "@/lib/gearGeometry";
 import { DEFAULT_OPENGRID_BOARD_TYPE, DEFAULT_OPENGRID_CHAMFER_MODE, DEFAULT_OPENGRID_CONNECTOR_HOLES, DEFAULT_OPENGRID_GRID_HEIGHT, DEFAULT_OPENGRID_GRID_WIDTH, DEFAULT_OPENGRID_SCREW_MOUNTING, openGridBoardDimensions } from "@/lib/openGridGeometry";
+import {
+  DEFAULT_OPENCONNECT_BASE_THICKNESS,
+  DEFAULT_OPENCONNECT_CORNER_ROUNDING,
+  DEFAULT_OPENCONNECT_INTERNAL_DEPTH,
+  DEFAULT_OPENCONNECT_INTERNAL_HEIGHT,
+  DEFAULT_OPENCONNECT_INTERNAL_WIDTH,
+  DEFAULT_OPENCONNECT_SHAPE_TYPE,
+  DEFAULT_OPENCONNECT_SLOT_LOCK_DISTRIBUTION,
+  DEFAULT_OPENCONNECT_SLOT_POSITION,
+  DEFAULT_OPENCONNECT_WALL_THICKNESS,
+  openConnectContainerDimensions,
+} from "@/lib/openConnectContainerGeometry";
+import { DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
 import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
@@ -25,6 +38,16 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // No dedicated icon asset exists yet for the openGrid board -- reusing the
   // box icon as the closest stand-in for a flat plate until one is made.
   { id: "opengrid-board", name: "OpenGrid Board", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "openGridBoard", color: "#5b5ce2", category: OPENGRID_CATEGORY },
+  // No dedicated icon asset exists yet for the openConnect container either --
+  // reusing the box icon as its stand-in too. Bin/Shelf is a property
+  // (containerShapeType), switched via the inspector panel, same pattern as
+  // the board's own boardType/chamferMode -- one catalog entry, not two.
+  { id: "openconnect-container", name: "OpenConnect Container", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "openConnectContainer", color: "#2f9e6e", category: OPENGRID_CATEGORY },
+  // No dedicated icon asset exists yet for the openGrid snap either -- reusing
+  // the box icon as its stand-in too. boardType/snapBodyShape are properties
+  // switched via the inspector panel, same one-catalog-entry pattern as the
+  // board and container above.
+  { id: "opengrid-snap", name: "OpenGrid Snap", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "openGridSnap", color: "#c77b1f", category: OPENGRID_CATEGORY },
 ];
 
 export type ToolbarShapeAssetGroup = { category: string; shapes: ToolbarShapeAsset[] };
@@ -98,10 +121,21 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   const roundProfile = asset.kind === "sphere" || asset.kind === "torus" || asset.kind === "ring" || asset.kind === "halfSphere";
   const flatProfile = asset.kind === "torus" || asset.kind === "ring" || asset.kind === "text" || asset.kind === "gear";
   const openGridBoardDefaults = asset.kind === "openGridBoard" ? openGridBoardDimensions(DEFAULT_OPENGRID_GRID_WIDTH, DEFAULT_OPENGRID_GRID_HEIGHT, DEFAULT_OPENGRID_BOARD_TYPE) : undefined;
+  const openConnectContainerDefaults = asset.kind === "openConnectContainer"
+    ? openConnectContainerDimensions({
+        shapeType: DEFAULT_OPENCONNECT_SHAPE_TYPE,
+        internalWidth: DEFAULT_OPENCONNECT_INTERNAL_WIDTH,
+        internalHeight: DEFAULT_OPENCONNECT_INTERNAL_HEIGHT,
+        internalDepth: DEFAULT_OPENCONNECT_INTERNAL_DEPTH,
+        wallThickness: DEFAULT_OPENCONNECT_WALL_THICKNESS,
+        baseThickness: DEFAULT_OPENCONNECT_BASE_THICKNESS,
+      })
+    : undefined;
+  const openGridSnapDefaults = asset.kind === "openGridSnap" ? openGridSnapDimensions(DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = openGridBoardDefaults ? openGridBoardDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = openGridBoardDefaults ? openGridBoardDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : asset.kind === "text" ? 28 : size;
 
   return {
     id: createLocalId(asset.id),
@@ -136,10 +170,24 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     helixQuality: asset.kind === "gear" ? DEFAULT_GEAR_HELIX_QUALITY : undefined,
     gridWidth: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_GRID_WIDTH : undefined,
     gridHeight: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_GRID_HEIGHT : undefined,
-    boardType: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_BOARD_TYPE : undefined,
+    boardType: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_BOARD_TYPE : asset.kind === "openGridSnap" ? DEFAULT_OPENGRID_SNAP_BOARD_TYPE : undefined,
     chamferMode: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_CHAMFER_MODE : undefined,
     connectorHoles: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_CONNECTOR_HOLES : undefined,
     screwMounting: asset.kind === "openGridBoard" ? DEFAULT_OPENGRID_SCREW_MOUNTING : undefined,
+    containerShapeType: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_SHAPE_TYPE : undefined,
+    internalWidth: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_INTERNAL_WIDTH : undefined,
+    internalHeight: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_INTERNAL_HEIGHT : undefined,
+    internalDepth: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_INTERNAL_DEPTH : undefined,
+    wallThickness: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_WALL_THICKNESS : undefined,
+    baseThickness: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_BASE_THICKNESS : undefined,
+    leftWallEnabled: asset.kind === "openConnectContainer" ? true : undefined,
+    rightWallEnabled: asset.kind === "openConnectContainer" ? true : undefined,
+    frontWallEnabled: asset.kind === "openConnectContainer" ? true : undefined,
+    bottomWallEnabled: asset.kind === "openConnectContainer" ? true : undefined,
+    slotLockDistribution: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_SLOT_LOCK_DISTRIBUTION : undefined,
+    slotPosition: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_SLOT_POSITION : undefined,
+    cornerRounding: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_CORNER_ROUNDING : undefined,
+    snapBodyShape: asset.kind === "openGridSnap" ? DEFAULT_OPENGRID_SNAP_BODY_SHAPE : undefined,
     locked: false,
     hidden: false,
   };

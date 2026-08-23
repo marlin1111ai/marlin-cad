@@ -372,7 +372,7 @@ function mergeBandGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGe
 // anything else (including genuine non-manifold edges elsewhere, e.g. the
 // pre-existing corner-wedge taper coincidences) is left alone rather than
 // risk misidentifying real geometry.
-function weldCoincidentDoubleFaces(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+export function weldCoincidentDoubleFaces(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   const position = geometry.getAttribute("position");
   const triCount = Math.floor(position.count / 3);
   const quantize = (v: number) => Math.round(v * 1e5) / 1e5;

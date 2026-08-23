@@ -130,6 +130,8 @@ export function fallbackSolidColor(shape: WorkplaneShape) {
   if (shape.kind === "pyramid") return "#f2cf10";
   if (shape.kind === "gear") return "#6f7f8d";
   if (shape.kind === "openGridBoard") return "#5b5ce2";
+  if (shape.kind === "openConnectContainer") return "#2f9e6e";
+  if (shape.kind === "openGridSnap") return "#c77b1f";
   return "#d41721";
 }
 
@@ -213,6 +215,20 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.chamferMode === b.chamferMode &&
     a.connectorHoles === b.connectorHoles &&
     a.screwMounting === b.screwMounting &&
+    a.containerShapeType === b.containerShapeType &&
+    a.internalWidth === b.internalWidth &&
+    a.internalHeight === b.internalHeight &&
+    a.internalDepth === b.internalDepth &&
+    a.wallThickness === b.wallThickness &&
+    a.baseThickness === b.baseThickness &&
+    a.leftWallEnabled === b.leftWallEnabled &&
+    a.rightWallEnabled === b.rightWallEnabled &&
+    a.frontWallEnabled === b.frontWallEnabled &&
+    a.bottomWallEnabled === b.bottomWallEnabled &&
+    a.slotLockDistribution === b.slotLockDistribution &&
+    a.slotPosition === b.slotPosition &&
+    a.cornerRounding === b.cornerRounding &&
+    a.snapBodyShape === b.snapBodyShape &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&

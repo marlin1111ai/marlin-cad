@@ -18,7 +18,9 @@ export type ShapeKind =
   | "polygon"
   | "icosahedron"
   | "mesh"
-  | "openGridBoard";
+  | "openGridBoard"
+  | "openConnectContainer"
+  | "openGridSnap";
 
 export type ShapeAsset = {
   id: string;
@@ -118,6 +120,16 @@ export type OpenGridBoardType = "full" | "lite" | "heavy";
 export type OpenGridChamferMode = "everywhere" | "corners" | "none";
 export type OpenGridScrewMounting = "none" | "corners" | "everywhere";
 
+export type OpenConnectShapeType = "Bin" | "Shelf";
+export type OpenConnectSlotLockDistribution = "All" | "Staggered" | "Corners" | "Top Corners" | "None";
+export type OpenConnectSlotPosition = "All" | "Staggered" | "Edge Rows" | "Edge Columns" | "Corners";
+export type OpenConnectCornerRounding = "None" | "Chamfer" | "Fillet";
+
+// "Heavy" boardType is intentionally unsupported for the Snap (see
+// openGridSnapGeometry.ts) -- the upstream generator has no matching
+// snap_thickness and our own Heavy board has no real groove yet.
+export type OpenGridSnapBodyShape = "Directional" | "Symmetric";
+
 export type SketchRevolveSettings = {
   startAngle: number;
   sweepAngle: number;
@@ -215,6 +227,20 @@ export type WorkplaneShape = {
   chamferMode?: OpenGridChamferMode;
   connectorHoles?: boolean;
   screwMounting?: OpenGridScrewMounting;
+  containerShapeType?: OpenConnectShapeType;
+  internalWidth?: number;
+  internalHeight?: number;
+  internalDepth?: number;
+  wallThickness?: number;
+  baseThickness?: number;
+  leftWallEnabled?: boolean;
+  rightWallEnabled?: boolean;
+  frontWallEnabled?: boolean;
+  bottomWallEnabled?: boolean;
+  slotLockDistribution?: OpenConnectSlotLockDistribution;
+  slotPosition?: OpenConnectSlotPosition;
+  cornerRounding?: OpenConnectCornerRounding;
+  snapBodyShape?: OpenGridSnapBodyShape;
   text?: string;
   font?: string;
   importedMesh?: {

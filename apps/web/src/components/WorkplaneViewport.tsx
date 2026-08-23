@@ -31,6 +31,8 @@ import { createGearGeometry } from "@/lib/gearGeometry";
 import { parseMeasurementInput } from "@/lib/measurementUnits";
 import { createMoveDimensionOverlay, type MoveDimensionAxis, type MoveDimensionOverlayData } from "@/lib/moveDimensionLines";
 import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
+import { createOpenConnectContainerGeometry } from "@/lib/openConnectContainerGeometry";
+import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
 import {
   horizontalPlacementWorkplane,
   placementWorkplaneCoordinates,
@@ -940,6 +942,20 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     chamferMode: shape.chamferMode,
     connectorHoles: shape.connectorHoles,
     screwMounting: shape.screwMounting,
+    containerShapeType: shape.containerShapeType,
+    internalWidth: shape.internalWidth,
+    internalHeight: shape.internalHeight,
+    internalDepth: shape.internalDepth,
+    wallThickness: shape.wallThickness,
+    baseThickness: shape.baseThickness,
+    leftWallEnabled: shape.leftWallEnabled,
+    rightWallEnabled: shape.rightWallEnabled,
+    frontWallEnabled: shape.frontWallEnabled,
+    bottomWallEnabled: shape.bottomWallEnabled,
+    slotLockDistribution: shape.slotLockDistribution,
+    slotPosition: shape.slotPosition,
+    cornerRounding: shape.cornerRounding,
+    snapBodyShape: shape.snapBodyShape,
     text: shape.text,
     font: shape.font,
   });
@@ -7195,6 +7211,29 @@ function createShapeObject(
         screwMounting: shape.screwMounting,
       })), material, shape);
       break;
+    case "openConnectContainer":
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createOpenConnectContainerGeometry({
+        shapeType: shape.containerShapeType,
+        internalWidth: shape.internalWidth,
+        internalHeight: shape.internalHeight,
+        internalDepth: shape.internalDepth,
+        wallThickness: shape.wallThickness,
+        baseThickness: shape.baseThickness,
+        leftWallEnabled: shape.leftWallEnabled,
+        rightWallEnabled: shape.rightWallEnabled,
+        frontWallEnabled: shape.frontWallEnabled,
+        bottomWallEnabled: shape.bottomWallEnabled,
+        slotLockDistribution: shape.slotLockDistribution,
+        slotPosition: shape.slotPosition,
+        cornerRounding: shape.cornerRounding,
+      })), material, shape);
+      break;
+    case "openGridSnap":
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createOpenGridSnapGeometry({
+        boardType: shape.boardType,
+        snapBodyShape: shape.snapBodyShape,
+      })), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7313,7 +7352,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {

@@ -22,6 +22,8 @@ import { manifoldWasmBase64 } from "@/generated/manifoldWasmBase64";
 import { sphereTessellation } from "@/lib/sphereTessellation";
 import { createGearGeometry } from "@/lib/gearGeometry";
 import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
+import { createOpenConnectContainerGeometry } from "@/lib/openConnectContainerGeometry";
+import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
 import { regularPolygonFootprintScale } from "@/lib/regularPolygonFootprint";
 import {
   ToolbarAlignIcon,
@@ -2229,6 +2231,35 @@ function buildGeometryMeshForShape(shape: WorkplaneShape): MeshData | null {
           chamferMode: shape.chamferMode,
           connectorHoles: shape.connectorHoles,
           screwMounting: shape.screwMounting,
+        }),
+      ).clone();
+      break;
+    case "openConnectContainer":
+      // Same shared-cache-then-clone pattern as openGridBoard above.
+      geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () =>
+        createOpenConnectContainerGeometry({
+          shapeType: shape.containerShapeType,
+          internalWidth: shape.internalWidth,
+          internalHeight: shape.internalHeight,
+          internalDepth: shape.internalDepth,
+          wallThickness: shape.wallThickness,
+          baseThickness: shape.baseThickness,
+          leftWallEnabled: shape.leftWallEnabled,
+          rightWallEnabled: shape.rightWallEnabled,
+          frontWallEnabled: shape.frontWallEnabled,
+          bottomWallEnabled: shape.bottomWallEnabled,
+          slotLockDistribution: shape.slotLockDistribution,
+          slotPosition: shape.slotPosition,
+          cornerRounding: shape.cornerRounding,
+        }),
+      ).clone();
+      break;
+    case "openGridSnap":
+      // Same shared-cache-then-clone pattern as openGridBoard above.
+      geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () =>
+        createOpenGridSnapGeometry({
+          boardType: shape.boardType,
+          snapBodyShape: shape.snapBodyShape,
         }),
       ).clone();
       break;
