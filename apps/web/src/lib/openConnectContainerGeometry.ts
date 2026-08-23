@@ -60,7 +60,14 @@ export const DEFAULT_OPENCONNECT_SLOT_LOCK_DISTRIBUTION: OpenConnectSlotLockDist
 export const DEFAULT_OPENCONNECT_SLOT_POSITION: OpenConnectSlotPosition = "All";
 export const DEFAULT_OPENCONNECT_CORNER_ROUNDING: OpenConnectCornerRounding = "None";
 
-export const MIN_OPENCONNECT_DIMENSION = 20;
+// Effectively "no minimum" -- below one print layer height, the cavity
+// this bounds won't physically exist on a real print anyway, so this is a
+// UI/sanity bound only (keeps the field from accepting 0 or negative
+// values), not a geometric requirement derived from wall thickness or slot
+// geometry. Unlike MIN_OPENCONNECT_WALL_THICKNESS below, nothing in the
+// slot mechanism or the sealed-slot fix (see file header) depends on this
+// value.
+export const MIN_OPENCONNECT_DIMENSION = 0.1;
 export const MAX_OPENCONNECT_DIMENSION = 560;
 // Floored at 3mm, comfortably >= the openConnect slot mechanism's own ~2.7mm
 // depth -- a wall thinner than the slot itself couldn't hold the connector
