@@ -56,6 +56,23 @@ import {
   openConnectContainerDimensions,
 } from "@/lib/openConnectContainerGeometry";
 import { normalizeOpenGridSnapBoardType, normalizeOpenGridSnapBodyShape, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
+import {
+  DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS,
+  DEFAULT_MULTICONNECT_PEG_TILT_DEG,
+  MAX_MULTICONNECT_SLOT_TOLERANCE,
+  MIN_MULTICONNECT_PLATE_DIMENSION,
+  MIN_MULTICONNECT_SLOT_TOLERANCE,
+  MULTICONNECT_BACK_THICKNESS,
+  multiconnectMaxCornerRadius,
+  multiconnectPlateDimensions,
+  normalizeMulticonnectCornerRadius,
+  normalizeMulticonnectPegFilletRadius,
+  normalizeMulticonnectPegTiltDeg,
+  normalizeMulticonnectPlateThickness,
+  normalizeMulticonnectSlotSpacing,
+  normalizeMulticonnectSlotTolerance,
+} from "@/lib/multiconnectContainerGeometry";
+import { DEFAULT_MULTICONNECT_PEG_LENGTH, multiconnectPegLayoutError } from "@/lib/shapeCatalog";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
@@ -139,7 +156,13 @@ function formatPropertyNumber(value: number, accuracy: MeasurementAccuracy, step
 }
 
 function propertyUsesLengthUnit(label: string) {
-  return ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness"].includes(label);
+  return (
+    ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness", "Plate Thickness", "Corner Radius", "Peg Length", "Peg Fillet", "Peg Row Z"].includes(label)
+    // Multiconnect peg-list rows: "Peg N Diameter" and the mounted-view
+    // position field are millimeter values too.
+    || label.endsWith("Diameter")
+    || label.startsWith("Position")
+  );
 }
 
 function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdate): ShapePropertyConfig[] {
@@ -318,6 +341,57 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
     properties.push({ type: "select", label: "Slot Position", value: slotPosition, options: ["All", "Staggered", "Edge Rows", "Edge Columns", "Corners"], onChange: (value) => onUpdate({ slotPosition: value as WorkplaneShape["slotPosition"] }) });
     properties.push({ type: "select", label: "Slot Lock", value: slotLockDistribution, options: ["All", "Staggered", "Corners", "Top Corners", "None"], onChange: (value) => onUpdate({ slotLockDistribution: value as WorkplaneShape["slotLockDistribution"] }) });
     properties.push({ type: "select", label: "Corner Rounding", value: cornerRounding, options: ["None", "Chamfer", "Fillet"], onChange: (value) => onUpdate({ cornerRounding: value as WorkplaneShape["cornerRounding"] }) });
+    return properties;
+  }
+
+  if (shape.kind === "multiconnectContainer") {
+    const shapeType = shape.multiconnectShapeType === "PegPlate" ? "PegPlate" : "Plate";
+    const slotSpacing = normalizeMulticonnectSlotSpacing(shape.multiconnectSlotSpacing);
+    const slotTolerance = normalizeMulticonnectSlotTolerance(shape.multiconnectSlotTolerance);
+    const plateThickness = normalizeMulticonnectPlateThickness(shapeDepth(shape));
+    const maxCornerRadius = multiconnectMaxCornerRadius({ width, height: shape.height, slotSpacing, slotTolerance: shape.multiconnectSlotTolerance });
+    const cornerRadius = normalizeMulticonnectCornerRadius(shape.multiconnectCornerRadius, maxCornerRadius);
+
+    // Any change that affects the plate envelope re-derives width/height and
+    // re-clamps the stored corner radius through the same
+    // multiconnectPlateDimensions the geometry builder itself uses (its own
+    // clamps: width >= max(25, spacing), height >= 25, radius <= safe max).
+    // depth (the plateThickness parameter) is only ever written as the
+    // user's literal value -- dims.depth is the derived mounting-face
+    // coordinate and must not round-trip back in as the parameter.
+    const applyPlatePatch = (patch: Partial<WorkplaneShape>) => {
+      const merged: WorkplaneShape = { ...shape, ...patch };
+      const dims = multiconnectPlateDimensions({
+        width: shapeWidth(merged),
+        height: merged.height,
+        plateThickness: shapeDepth(merged),
+        slotSpacing: merged.multiconnectSlotSpacing,
+        slotTolerance: merged.multiconnectSlotTolerance,
+        cornerRadius: merged.multiconnectCornerRadius,
+      });
+      onUpdate({ ...patch, width: dims.width, height: dims.height, multiconnectCornerRadius: dims.cornerRadius, size: resizedShapeSize(dims.width, shapeDepth(merged)) }, { resizeAxis: "width" });
+    };
+
+    const properties: ShapePropertyConfig[] = [
+      { type: "select", label: "Shape Type", value: shapeType === "PegPlate" ? "Peg Plate" : "Plate", options: ["Plate", "Peg Plate"], onChange: (value) => onUpdate({ multiconnectShapeType: value === "Peg Plate" ? "PegPlate" : "Plate" }) },
+      { label: "Width", value: width, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, onChange: (value) => applyPlatePatch({ width: value }) },
+      { label: "Height", value: shape.height, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, onChange: (value) => applyPlatePatch({ height: value }) },
+      { label: "Plate Thickness", value: plateThickness, min: MULTICONNECT_BACK_THICKNESS, max: 20, step: 0.1, onChange: (value) => onUpdate({ depth: normalizeMulticonnectPlateThickness(value) }, { resizeAxis: "depth" }) },
+      { label: "Corner Radius", value: cornerRadius, min: 0, max: maxCornerRadius, step: 0.5, onChange: (value) => applyPlatePatch({ multiconnectCornerRadius: value }) },
+      // 28mm matches the openGrid pitch (owner default); 25mm is the SCAD's
+      // Multiboard spacing, offered as the one alternative.
+      { type: "select", label: "Slot Spacing", value: String(slotSpacing), options: ["28", "25"], onChange: (value) => applyPlatePatch({ multiconnectSlotSpacing: Number(value) }) },
+      { type: "select", label: "Quick Release", value: shape.multiconnectSlotQuickRelease ? "on" : "off", options: ["off", "on"], onChange: (value) => onUpdate({ multiconnectSlotQuickRelease: value === "on" }) },
+      { label: "Slot Tolerance", value: slotTolerance, min: MIN_MULTICONNECT_SLOT_TOLERANCE, max: MAX_MULTICONNECT_SLOT_TOLERANCE, step: 0.005, onChange: (value) => applyPlatePatch({ multiconnectSlotTolerance: value }) },
+    ];
+    if (shapeType === "PegPlate") {
+      properties.push(
+        { label: "Peg Length", value: shape.multiconnectPegLength ?? DEFAULT_MULTICONNECT_PEG_LENGTH, min: 5, max: 100, step: 0.5, onChange: (value) => onUpdate({ multiconnectPegLength: value }) },
+        { label: "Peg Fillet", value: normalizeMulticonnectPegFilletRadius(shape.multiconnectPegFillet ?? DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS), min: 0, max: 5, step: 0.1, onChange: (value) => onUpdate({ multiconnectPegFillet: normalizeMulticonnectPegFilletRadius(value) }) },
+        { label: "Peg Tilt", value: normalizeMulticonnectPegTiltDeg(shape.multiconnectPegTilt ?? DEFAULT_MULTICONNECT_PEG_TILT_DEG), min: 0, max: 45, step: 1, onChange: (value) => onUpdate({ multiconnectPegTilt: normalizeMulticonnectPegTiltDeg(value) }) },
+        { label: "Peg Row Z", value: shape.multiconnectPegRowZ ?? Math.round(shape.height / 2), min: 0, max: shape.height, step: 0.5, onChange: (value) => onUpdate({ multiconnectPegRowZ: value }) },
+      );
+    }
     return properties;
   }
 
@@ -687,6 +761,9 @@ export function ShapeInspector({
           ) : null}
         </div>
       ) : null}
+      {shape.kind === "multiconnectContainer" && shape.multiconnectShapeType === "PegPlate" ? (
+        <MulticonnectPegCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
+      ) : null}
       {gearType === "helical" ? (
         <div className={`property-card ${gearHelixOpen ? "" : "collapsed"}`}>
           <button
@@ -712,6 +789,94 @@ export function ShapeInspector({
         </>
       ) : null}
     </aside>
+  );
+}
+
+// Peg list editor for the Multiconnect PegPlate: add/remove pegs, each row
+// a diameter and a mounted-view position. Peg x means "from the plate's
+// LEFT edge as the mounted viewer sees it" (the geometry mirrors it
+// internally -- physical-test-derived convention, see
+// multiconnectContainerGeometry.ts), which is why the position field is
+// labeled the way it is. Layout mistakes (overlap, edge crowding) don't
+// crash anything: the viewport falls back to the bare plate and the
+// geometry module's rejection shows here as an inline message.
+function MulticonnectPegCard({
+  shape,
+  workspace,
+  disabled,
+  onUpdate,
+  onInteractionActiveChange,
+}: {
+  shape: WorkplaneShape;
+  workspace: WorkplaneWorkspaceSettings;
+  disabled?: boolean;
+  onUpdate: ShapeInspectorUpdate;
+  onInteractionActiveChange?: (active: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const pegs = shape.multiconnectPegs ?? [];
+  const plateWidth = shapeWidth(shape);
+  const layoutError = multiconnectPegLayoutError(shape);
+  const setPegs = (next: NonNullable<WorkplaneShape["multiconnectPegs"]>) => onUpdate({ multiconnectPegs: next });
+  const addPeg = () => {
+    const last = pegs[pegs.length - 1];
+    const x = last ? Math.min(plateWidth - 10, last.x + 30) : Math.round(plateWidth / 2);
+    setPegs([...pegs, { diameter: 6, x }]);
+  };
+  return (
+    <div className={`property-card ${open ? "" : "collapsed"}`}>
+      <button
+        className="property-card-header"
+        type="button"
+        aria-expanded={open}
+        aria-controls={`multiconnect-pegs-${shape.id}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>Pegs</span>
+        <ChevronUp className={open ? "" : "collapsed"} size={25} strokeWidth={2.8} />
+      </button>
+      {open ? (
+        <div className="property-list" id={`multiconnect-pegs-${shape.id}`}>
+          {pegs.map((peg, index) => (
+            <div key={index}>
+              <RangeProperty
+                label={`Peg ${index + 1} Diameter`}
+                value={peg.diameter}
+                min={2}
+                max={20}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(diameter) => setPegs(pegs.map((entry, i) => (i === index ? { ...entry, diameter } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label="Position (from left, as mounted)"
+                value={peg.x}
+                min={0}
+                max={plateWidth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(x) => setPegs(pegs.map((entry, i) => (i === index ? { ...entry, x } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setPegs(pegs.filter((_, i) => i !== index))}>
+                <span>Remove Peg {index + 1}</span>
+              </button>
+            </div>
+          ))}
+          {layoutError ? (
+            <p role="alert" style={{ color: "#e0524d", margin: "4px 2px", fontSize: "0.86em", lineHeight: 1.35 }}>
+              {layoutError}
+            </p>
+          ) : null}
+          <button className="inspector-action-button" type="button" disabled={disabled} onClick={addPeg}>
+            <span>Add Peg</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

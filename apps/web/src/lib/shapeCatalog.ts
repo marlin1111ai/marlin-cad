@@ -15,6 +15,17 @@ import {
   openConnectContainerDimensions,
 } from "@/lib/openConnectContainerGeometry";
 import { DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
+import {
+  createMulticonnectPlateGeometry,
+  DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS,
+  DEFAULT_MULTICONNECT_PEG_TILT_DEG,
+  DEFAULT_MULTICONNECT_SLOT_SPACING,
+  DEFAULT_MULTICONNECT_SLOT_TOLERANCE,
+  multiconnectPlateDimensions,
+  multiconnectPlatePositions,
+  type MulticonnectPlateOptions,
+} from "@/lib/multiconnectContainerGeometry";
+import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
@@ -48,7 +59,82 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // switched via the inspector panel, same one-catalog-entry pattern as the
   // board and container above.
   { id: "opengrid-snap", name: "OpenGrid Snap", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "openGridSnap", color: "#c77b1f", category: OPENGRID_CATEGORY },
+  // No dedicated icon asset exists yet for the multiconnect container either --
+  // same box-icon stand-in. Plate/PegPlate is a property
+  // (multiconnectShapeType) switched via the inspector panel, one catalog
+  // entry, matching the container/board/snap pattern above.
+  { id: "multiconnect-container", name: "Multiconnect Container", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "multiconnectContainer", color: "#9b3bd2", category: OPENGRID_CATEGORY },
 ];
+
+// Insert defaults for the Multiconnect Container: a 112x60 Plate (4 slots at
+// the 28mm spacing), 10mm thick (the physically-validated wrench-rack
+// recipe), 5mm rounded corners.
+export const DEFAULT_MULTICONNECT_SHAPE_WIDTH = 112;
+export const DEFAULT_MULTICONNECT_SHAPE_HEIGHT = 60;
+export const DEFAULT_MULTICONNECT_SHAPE_THICKNESS = 10;
+export const DEFAULT_MULTICONNECT_SHAPE_CORNER_RADIUS = 5;
+export const DEFAULT_MULTICONNECT_PEG_LENGTH = 45;
+
+// The single shape -> geometry-options mapping for the Multiconnect
+// Container: the viewport arm, the editor's export arm, and the inspector's
+// validation all go through this, so what renders, what exports, and what
+// validates can never disagree. Peg x stays in as-mounted view space here --
+// the geometry module owns the mirror.
+export function multiconnectPlateOptionsForShape(shape: WorkplaneShape): MulticonnectPlateOptions {
+  const pegLength = shape.multiconnectPegLength ?? DEFAULT_MULTICONNECT_PEG_LENGTH;
+  const pegRowZ = shape.multiconnectPegRowZ ?? Math.round(shape.height / 2);
+  const pegs = shape.multiconnectShapeType === "PegPlate"
+    ? (shape.multiconnectPegs ?? []).map((peg) => ({ diameter: peg.diameter, length: pegLength, x: peg.x, z: pegRowZ }))
+    : [];
+  return {
+    width: shapeWidth(shape),
+    height: shape.height,
+    plateThickness: shapeDepth(shape),
+    cornerRadius: shape.multiconnectCornerRadius,
+    slotSpacing: shape.multiconnectSlotSpacing,
+    slotQuickRelease: shape.multiconnectSlotQuickRelease,
+    slotTolerance: shape.multiconnectSlotTolerance,
+    pegs,
+    pegFilletRadius: shape.multiconnectPegFillet,
+    pegTiltDeg: shape.multiconnectPegTilt,
+  };
+}
+
+// The geometry module THROWS on invalid peg layouts (its callers are
+// expected to validate). The render/export arms must never crash on a
+// half-edited layout, so they fall back to the bare plate; the inspector
+// shows the validation message inline instead (multiconnectPegLayoutError).
+export function createMulticonnectGeometryForShape(shape: WorkplaneShape) {
+  const options = multiconnectPlateOptionsForShape(shape);
+  try {
+    return createMulticonnectPlateGeometry(options);
+  } catch {
+    return createMulticonnectPlateGeometry({ ...options, pegs: [] });
+  }
+}
+
+// Friendly inline message for the inspector: null when the peg layout is
+// valid, otherwise the geometry module's rejection translated to 1-based
+// peg numbers and plain language.
+export function multiconnectPegLayoutError(shape: WorkplaneShape): string | null {
+  const options = multiconnectPlateOptionsForShape(shape);
+  if (!options.pegs?.length) return null;
+  try {
+    multiconnectPlatePositions(options);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const overlap = message.match(/pegs (\d+) and (\d+): footprints overlap/);
+    if (overlap) return `Pegs ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap — space them further apart.`;
+    const edge = message.match(/peg (\d+): footprint .* edge/);
+    if (edge) return `Peg ${Number(edge[1]) + 1} is too close to the plate edge (2mm clearance beyond the fillet is required).`;
+    const short = message.match(/peg (\d+): length/);
+    if (short) return `Peg ${Number(short[1]) + 1} is too short to clear its root fillet.`;
+    const invalid = message.match(/peg (\d+): diameter/);
+    if (invalid) return `Peg ${Number(invalid[1]) + 1} has invalid values.`;
+    return message;
+  }
+}
 
 export type ToolbarShapeAssetGroup = { category: string; shapes: ToolbarShapeAsset[] };
 
@@ -132,10 +218,20 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
       })
     : undefined;
   const openGridSnapDefaults = asset.kind === "openGridSnap" ? openGridSnapDimensions(DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE) : undefined;
+  // width/height validated through the module's own clamps; depth stays the
+  // literal plateThickness parameter (multiconnectPlateDimensions().depth is
+  // the derived mounting-face coordinate -- numerically ~= thickness but not
+  // the same double, and depth round-trips back in as the parameter).
+  const multiconnectDefaults = asset.kind === "multiconnectContainer"
+    ? {
+        ...multiconnectPlateDimensions({ width: DEFAULT_MULTICONNECT_SHAPE_WIDTH, height: DEFAULT_MULTICONNECT_SHAPE_HEIGHT, plateThickness: DEFAULT_MULTICONNECT_SHAPE_THICKNESS }),
+        depth: DEFAULT_MULTICONNECT_SHAPE_THICKNESS,
+      }
+    : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : asset.kind === "text" ? 28 : size;
 
   return {
     id: createLocalId(asset.id),
@@ -188,6 +284,16 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     slotPosition: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_SLOT_POSITION : undefined,
     cornerRounding: asset.kind === "openConnectContainer" ? DEFAULT_OPENCONNECT_CORNER_ROUNDING : undefined,
     snapBodyShape: asset.kind === "openGridSnap" ? DEFAULT_OPENGRID_SNAP_BODY_SHAPE : undefined,
+    multiconnectShapeType: asset.kind === "multiconnectContainer" ? "Plate" : undefined,
+    multiconnectSlotSpacing: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_SLOT_SPACING : undefined,
+    multiconnectSlotQuickRelease: asset.kind === "multiconnectContainer" ? false : undefined,
+    multiconnectSlotTolerance: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_SLOT_TOLERANCE : undefined,
+    multiconnectCornerRadius: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_SHAPE_CORNER_RADIUS : undefined,
+    multiconnectPegLength: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_PEG_LENGTH : undefined,
+    multiconnectPegFillet: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS : undefined,
+    multiconnectPegTilt: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_PEG_TILT_DEG : undefined,
+    multiconnectPegRowZ: asset.kind === "multiconnectContainer" ? Math.round(DEFAULT_MULTICONNECT_SHAPE_HEIGHT / 2) : undefined,
+    multiconnectPegs: asset.kind === "multiconnectContainer" ? [] : undefined,
     locked: false,
     hidden: false,
   };

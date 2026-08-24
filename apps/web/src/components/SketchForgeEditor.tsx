@@ -94,7 +94,7 @@ import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceF
 import { findSketchOutlineIntersection } from "@/lib/sketchProfileValidation";
 import { buildSketchRevolveMesh, DEFAULT_SKETCH_REVOLVE_SETTINGS, normalizeSketchRevolveSettings, type SketchRevolveMesh } from "@/lib/sketchRevolve";
 import { exportSkfProject, SKF_MEDIA_TYPE } from "@/lib/skfProject";
-import { makeShapeFromAsset, sceneShape, toolbarShapeAssetGroups, type ToolbarShapeAsset, type ToolbarShapeAssetGroup } from "@/lib/shapeCatalog";
+import { createMulticonnectGeometryForShape, makeShapeFromAsset, sceneShape, toolbarShapeAssetGroups, type ToolbarShapeAsset, type ToolbarShapeAssetGroup } from "@/lib/shapeCatalog";
 import { importExtensionSupported } from "@/lib/importExtensions";
 import { importedShapeFromStl } from "@/lib/stlImport";
 import { exportMeshesToStl } from "@/lib/stlExport";
@@ -2262,6 +2262,12 @@ function buildGeometryMeshForShape(shape: WorkplaneShape): MeshData | null {
           snapBodyShape: shape.snapBodyShape,
         }),
       ).clone();
+      break;
+    case "multiconnectContainer":
+      // Same shared-cache-then-clone pattern as openGridBoard above; the
+      // helper also guards against an invalid mid-edit peg layout (falls
+      // back to the bare plate rather than throwing).
+      geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () => createMulticonnectGeometryForShape(shape)).clone();
       break;
     case "polygon":
       geometry = new THREE.CylinderGeometry(1, 1, height, 6);

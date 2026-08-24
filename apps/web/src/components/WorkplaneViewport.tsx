@@ -33,6 +33,7 @@ import { createMoveDimensionOverlay, type MoveDimensionAxis, type MoveDimensionO
 import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
 import { createOpenConnectContainerGeometry } from "@/lib/openConnectContainerGeometry";
 import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
+import { createMulticonnectGeometryForShape } from "@/lib/shapeCatalog";
 import {
   horizontalPlacementWorkplane,
   placementWorkplaneCoordinates,
@@ -956,6 +957,16 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     slotPosition: shape.slotPosition,
     cornerRounding: shape.cornerRounding,
     snapBodyShape: shape.snapBodyShape,
+    multiconnectShapeType: shape.multiconnectShapeType,
+    multiconnectSlotSpacing: shape.multiconnectSlotSpacing,
+    multiconnectSlotQuickRelease: shape.multiconnectSlotQuickRelease,
+    multiconnectSlotTolerance: shape.multiconnectSlotTolerance,
+    multiconnectCornerRadius: shape.multiconnectCornerRadius,
+    multiconnectPegLength: shape.multiconnectPegLength,
+    multiconnectPegFillet: shape.multiconnectPegFillet,
+    multiconnectPegTilt: shape.multiconnectPegTilt,
+    multiconnectPegRowZ: shape.multiconnectPegRowZ,
+    multiconnectPegs: shape.multiconnectPegs,
     text: shape.text,
     font: shape.font,
   });
@@ -7234,6 +7245,13 @@ function createShapeObject(
         snapBodyShape: shape.snapBodyShape,
       })), material, shape);
       break;
+    case "multiconnectContainer":
+      // createMulticonnectGeometryForShape maps the shape fields to the
+      // geometry module's options (peg x stays in as-mounted view space) and
+      // falls back to the bare plate if a mid-edit peg layout is invalid --
+      // the inspector shows that validation message, the render never throws.
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createMulticonnectGeometryForShape(shape)), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7352,7 +7370,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {

@@ -20,7 +20,8 @@ export type ShapeKind =
   | "mesh"
   | "openGridBoard"
   | "openConnectContainer"
-  | "openGridSnap";
+  | "openGridSnap"
+  | "multiconnectContainer";
 
 export type ShapeAsset = {
   id: string;
@@ -129,6 +130,17 @@ export type OpenConnectCornerRounding = "None" | "Chamfer" | "Fillet";
 // openGridSnapGeometry.ts) -- the upstream generator has no matching
 // snap_thickness and our own Heavy board has no real groove yet.
 export type OpenGridSnapBodyShape = "Directional" | "Symmetric";
+
+// Bin does not exist yet for the Multiconnect Container -- the geometry
+// module only builds the (Peg)Plate so far; the enum grows when it does.
+export type MulticonnectShapeType = "Plate" | "PegPlate";
+
+// One peg row in the inspector's peg list. `x` is in AS-MOUNTED VIEW SPACE
+// (from the plate's left edge as the mounted viewer sees it) -- the
+// geometry module mirrors it internally; see the MOUNTED-VIEW X CONVENTION
+// block in multiconnectContainerGeometry.ts. Length and row height are
+// shared across pegs (multiconnectPegLength / multiconnectPegRowZ).
+export type MulticonnectShapePeg = { diameter: number; x: number };
 
 export type SketchRevolveSettings = {
   startAngle: number;
@@ -241,6 +253,19 @@ export type WorkplaneShape = {
   slotPosition?: OpenConnectSlotPosition;
   cornerRounding?: OpenConnectCornerRounding;
   snapBodyShape?: OpenGridSnapBodyShape;
+  // Multiconnect Container (kind "multiconnectContainer"). Plate width /
+  // height / thickness live directly in width / height / depth; these hold
+  // the rest of the geometry parameters.
+  multiconnectShapeType?: MulticonnectShapeType;
+  multiconnectSlotSpacing?: number;
+  multiconnectSlotQuickRelease?: boolean;
+  multiconnectSlotTolerance?: number;
+  multiconnectCornerRadius?: number;
+  multiconnectPegLength?: number;
+  multiconnectPegFillet?: number;
+  multiconnectPegTilt?: number;
+  multiconnectPegRowZ?: number;
+  multiconnectPegs?: MulticonnectShapePeg[];
   text?: string;
   font?: string;
   importedMesh?: {
