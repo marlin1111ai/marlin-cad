@@ -16,6 +16,7 @@ Where things stand right now.
 - Multiconnect UI registered in the editor (`10982d5`).
 - Wrench Racks presets added to the OpenGrid insert menu (`f4e3248`).
 - Six validated reference STLs committed to `test-prints/` (`c851e06`).
+- reference/ session-orientation docs (SESSION-STATE, OPEN-ITEMS, DECISIONS, KNOWN-FIXES) added (`640ebe3`).
 
 ## Print status
 

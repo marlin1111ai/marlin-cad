@@ -2,7 +2,7 @@
 
 Design decisions and the reason for each.
 
-- **Foreman/builder workflow, print-gated phases.** The owner (Marlin) makes design decisions and rules on scope; Claude builds in small phases, each committed and pushed under an agreed gate. Phases that produce physical geometry are print-gated — a coupon or sampler is printed and hand-verified before the next phase builds on it.
+- **Foreman/builder workflow, print-gated phases.** Claude (chat) is the foreman — plans, writes specs, reviews reports. Claude Code is the builder — implements on the Linux box. Phases are print-gated: a coupon or sampler is printed and hand-verified before the next phase builds on it.
 - **Boundary-rep/earcut over runtime CSG.** Runtime CSG subtraction is unreliable for cuts that reach a surface and is slower; boundary construction is dependable and dramatically faster. See CLAUDE-LESSONS.md.
 - **UI scoping over code deletion.** Board Type is restricted to "full" and Heavy is hidden in the UI rather than removing the underlying code, since the variants aren't validated yet.
 - **Wrench Racks presets must stay byte-identical to test-prints/ reference STLs.** Those STLs are the physically validated exports; any geometry change that alters them requires a new print verification pass before merging.
