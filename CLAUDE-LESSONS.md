@@ -50,11 +50,16 @@ An internal gap narrower than the printer can resolve does not print as a
 gap: the walls on either side fuse, and molten material oozes through into
 adjacent cavities. Every geometry check passes — the mesh genuinely
 contains the slit — but the physical part comes out wrong (blocked or
-undersized cavities, fused features). Lesson: internal clearances must be
-printable-width or designed out entirely; a modeled gap below roughly a
-line width is a defect, not a feature. Geometry validation cannot catch
-this class of bug — only thinking about minimum feature size, or a test
-print, does.
+undersized cavities, fused features). Concrete example: an OpenConnect
+Container bin exported at ~1.1mm Internal Depth passed every geometry
+check (watertight, slots fully perforated), but the interior slit was
+below printable feature size — the slicer fused it with gap fill, and the
+ooze clogged the slot pockets exactly where they perforate into the
+interior. Found by raycasting the physically-exported STL after a failed
+print. Lesson: internal clearances must be printable-width or designed out
+entirely; a modeled gap below roughly a line width is a defect, not a
+feature. Geometry validation cannot catch this class of bug — only
+thinking about minimum feature size, or a test print, does.
 
 ## 2026-08-22 — Prefer boundary representation over runtime CSG for cuts that reach a surface
 
