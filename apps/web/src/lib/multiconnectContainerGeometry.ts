@@ -42,6 +42,15 @@ import {
 // triangulation is carried through verbatim (transform + winding reversal
 // only, never re-derived).
 //
+// PegPlate: the `pegs` option grows front-face pegs (for hanging tools;
+// cantilevered loads, hence the filleted root). Each peg is a surface of
+// revolution -- quarter-round fillet collar, cylindrical wall, flat tip --
+// whose root rim ring IS the front cap's earcut hole contour (same
+// doubles), so pegs are unioned by construction, never CSG'd. pegTiltDeg
+// tilts pegs upward via a shear (see pegRing), pegFilletRadius sets the
+// root collar, and normalizedPegs rejects layouts whose footprints
+// overlap, leave the outline, or crowd the edges below the 2mm keep-out.
+//
 // cornerRadius (default 0 = sharp) rounds all four plate corners with
 // quarter-circle arcs in the 2D outline; the caps and perimeter walls all
 // follow the rounded outline through the same earcut/quad path. The radius
@@ -99,6 +108,28 @@ export const MULTICONNECT_CORNER_SEGMENTS = 10;
 export const MULTICONNECT_CORNER_SLOT_CLEARANCE = 0.5;
 const MIN_EFFECTIVE_CORNER_RADIUS = 0.1;
 
+// Pegs (PegPlate variant): front-face cylinders for hanging tools. Radial
+// segment count, fillet arc steps, and the mandatory keep-out between a
+// peg's footprint (peg + fillet collar) and the plate edge.
+export const MULTICONNECT_PEG_SEGMENTS = 32;
+export const MULTICONNECT_PEG_FILLET_SEGMENTS = 6;
+export const DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS = 2;
+export const DEFAULT_MULTICONNECT_PEG_TILT_DEG = 5;
+export const MULTICONNECT_PEG_EDGE_CLEARANCE = 2;
+// Adjacent peg footprints must keep at least this gap -- tangent rims would
+// pinch the front cap's earcut into degenerate slivers.
+export const MULTICONNECT_PEG_GAP = 0.1;
+
+export type MulticonnectPeg = {
+  diameter: number;
+  length: number;
+  // Peg center on the front face: x from the plate's left edge, z from its
+  // bottom edge (named from the mounted-wall perspective; z maps to the
+  // geometry's Y axis).
+  x: number;
+  z: number;
+};
+
 export type MulticonnectPlateOptions = {
   width?: number;
   height?: number;
@@ -106,6 +137,9 @@ export type MulticonnectPlateOptions = {
   slotQuickRelease?: boolean;
   slotTolerance?: number;
   cornerRadius?: number;
+  pegs?: MulticonnectPeg[];
+  pegFilletRadius?: number;
+  pegTiltDeg?: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -287,13 +321,19 @@ function triangleNormal(a: Point3, b: Point3, c: Point3): [number, number, numbe
 // emits it wound so its normal points along desiredNormal. Winding is
 // decided from the contour's own signed area rather than per-earcut-triangle
 // normals, so degenerate slivers can't flip individual faces.
-function pushCap(out: number[], contour: Point2[], to3D: (point: Point2) => Point3, desiredNormal: Point3) {
-  const triangles = THREE.ShapeUtils.triangulateShape(contour.map(([u, v]) => new THREE.Vector2(u, v)), []);
+function pushCap(out: number[], contour: Point2[], to3D: (point: Point2) => Point3, desiredNormal: Point3, holes: Point2[][] = []) {
+  const triangles = THREE.ShapeUtils.triangulateShape(
+    contour.map(([u, v]) => new THREE.Vector2(u, v)),
+    holes.map((hole) => hole.map(([u, v]) => new THREE.Vector2(u, v))),
+  );
+  // triangulateShape's face indices address the contour followed by every
+  // hole's points, in order.
+  const allPoints = holes.length > 0 ? contour.concat(...holes) : contour;
   let flip: boolean | null = null;
   for (const [i0, i1, i2] of triangles) {
-    const a = to3D(contour[i0]);
-    const b = to3D(contour[i1]);
-    const c = to3D(contour[i2]);
+    const a = to3D(allPoints[i0]);
+    const b = to3D(allPoints[i1]);
+    const c = to3D(allPoints[i2]);
     if (flip === null) {
       const normal = triangleNormal(a, b, c);
       const dot = normal[0] * desiredNormal[0] + normal[1] * desiredNormal[1] + normal[2] * desiredNormal[2];
@@ -318,6 +358,120 @@ function pushRectangleCap(out: number[], corners: [Point3, Point3, Point3, Point
   }
 }
 
+// ===== pegs =====
+
+export function normalizeMulticonnectPegFilletRadius(value?: number): number {
+  const radius = clamp(finiteOr(value, DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS), 0, 5);
+  return radius < 0.05 ? 0 : radius;
+}
+
+export function normalizeMulticonnectPegTiltDeg(value?: number): number {
+  return clamp(finiteOr(value, DEFAULT_MULTICONNECT_PEG_TILT_DEG), 0, 45);
+}
+
+// Positive = how far inside the (possibly rounded) plate outline the point
+// sits; the standard rounded-box signed distance, negated.
+function roundedRectInsideDistance(px: number, py: number, width: number, height: number, cornerRadius: number): number {
+  const hx = Math.abs(px - width / 2) - (width / 2 - cornerRadius);
+  const hy = Math.abs(py - height / 2) - (height / 2 - cornerRadius);
+  const outside = Math.hypot(Math.max(hx, 0), Math.max(hy, 0));
+  return -(outside + Math.min(Math.max(hx, hy), 0) - cornerRadius);
+}
+
+type NormalizedPeg = { x: number; y: number; radius: number; length: number };
+
+// Validates the caller-provided peg layout. Positions are explicit (no
+// auto-layout), so a bad layout is a caller bug: this throws rather than
+// silently dropping or nudging pegs. Checks are footprint-level (root rim
+// circles on the face plane); at the supported tilt range the sheared
+// bodies stay within a couple of mm of their footprints and the mandatory
+// edge/gap clearances absorb that.
+function normalizedPegs(pegs: MulticonnectPeg[], width: number, height: number, cornerRadius: number, filletRadius: number, tiltCos: number): NormalizedPeg[] {
+  const result: NormalizedPeg[] = [];
+  pegs.forEach((peg, index) => {
+    const { diameter, length, x, z } = peg;
+    if (![diameter, length, x, z].every(Number.isFinite) || diameter <= 0 || length <= 0) {
+      throw new Error(`multiconnect peg ${index}: diameter/length/x/z must be finite and positive`);
+    }
+    if (length * tiltCos <= filletRadius + 0.5) {
+      throw new Error(`multiconnect peg ${index}: length ${length} is too short to clear the ${filletRadius}mm fillet`);
+    }
+    const radius = diameter / 2;
+    const footprint = radius + filletRadius;
+    const inside = roundedRectInsideDistance(x, z, width, height, cornerRadius);
+    if (inside < footprint + MULTICONNECT_PEG_EDGE_CLEARANCE) {
+      throw new Error(`multiconnect peg ${index}: footprint (r=${footprint}mm) is within ${MULTICONNECT_PEG_EDGE_CLEARANCE}mm of the plate edge`);
+    }
+    result.push({ x, y: z, radius, length });
+  });
+  for (let i = 0; i < result.length; i += 1) {
+    for (let j = i + 1; j < result.length; j += 1) {
+      const distance = Math.hypot(result[i].x - result[j].x, result[i].y - result[j].y);
+      if (distance < result[i].radius + result[j].radius + 2 * filletRadius + MULTICONNECT_PEG_GAP) {
+        throw new Error(`multiconnect pegs ${i} and ${j}: footprints overlap (centers ${distance.toFixed(2)}mm apart)`);
+      }
+    }
+  }
+  return result;
+}
+
+const PEG_ANGLES = Array.from({ length: MULTICONNECT_PEG_SEGMENTS }, (_, index) => (2 * Math.PI * index) / MULTICONNECT_PEG_SEGMENTS);
+
+// One ring of the peg surface: a circle of the given radius parallel to the
+// face plane, at the given perpendicular depth in front of it, its center
+// shifted up by shear * depth. Tilt-as-shear keeps every ring a true circle
+// in a face-parallel plane, so the root rim lies exactly in the face plane
+// and stitches into the front cap's hole -- a rotated cylinder would meet
+// the face in an ellipse and the fillet ring would leave the plane
+// entirely. At the supported tilts the cross-section difference is under
+// half a percent.
+function pegRing(peg: NormalizedPeg, shear: number, radius: number, depth: number): Point3[] {
+  return PEG_ANGLES.map((angle) => [peg.x + radius * Math.cos(angle), peg.y + shear * depth + radius * Math.sin(angle), -depth || 0]);
+}
+
+function pushPegSurfaces(positions: number[], peg: NormalizedPeg, rings: Point3[][], profile: [number, number][], shear: number, filletRadius: number) {
+  const segments = MULTICONNECT_PEG_SEGMENTS;
+  for (let band = 0; band + 1 < rings.length; band += 1) {
+    const isFillet = profile[band][0] !== profile[band + 1][0];
+    for (let i = 0; i < segments; i += 1) {
+      const j = (i + 1) % segments;
+      const p0 = rings[band][i];
+      const p1 = rings[band][j];
+      const p2 = rings[band + 1][j];
+      const p3 = rings[band + 1][i];
+      const midAngle = (2 * Math.PI * (i + 0.5)) / segments;
+      let desired: Point3;
+      if (isFillet) {
+        // Outward on the concave fillet points from the surface toward the
+        // revolved arc-center ring.
+        const centerX = peg.x + (peg.radius + filletRadius) * Math.cos(midAngle);
+        const centerY = peg.y + shear * filletRadius + (peg.radius + filletRadius) * Math.sin(midAngle);
+        desired = [centerX - (p0[0] + p2[0]) / 2, centerY - (p0[1] + p2[1]) / 2, -filletRadius - (p0[2] + p2[2]) / 2];
+      } else {
+        desired = [Math.cos(midAngle), Math.sin(midAngle), 0];
+      }
+      const normal = triangleNormal(p0, p1, p2);
+      const dot = normal[0] * desired[0] + normal[1] * desired[1] + normal[2] * desired[2];
+      if (dot < 0) {
+        pushTriangle(positions, p0, p2, p1);
+        pushTriangle(positions, p0, p3, p2);
+      } else {
+        pushTriangle(positions, p0, p1, p2);
+        pushTriangle(positions, p0, p2, p3);
+      }
+    }
+  }
+  const tipRing = rings[rings.length - 1];
+  const tipDepth = profile[profile.length - 1][1];
+  const tipCenter: Point3 = [peg.x, peg.y + shear * tipDepth, -tipDepth];
+  for (let i = 0; i < segments; i += 1) {
+    const j = (i + 1) % segments;
+    const normal = triangleNormal(tipCenter, tipRing[i], tipRing[j]);
+    if (normal[2] > 0) pushTriangle(positions, tipCenter, tipRing[j], tipRing[i]);
+    else pushTriangle(positions, tipCenter, tipRing[i], tipRing[j]);
+  }
+}
+
 // ===== main entry point =====
 
 export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {}): number[] {
@@ -331,6 +485,35 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
   const centers = multiconnectSlotCenters(width, slotSpacing);
   const cornerRadius = normalizeMulticonnectCornerRadius(options.cornerRadius, maxCornerRadiusFor(width, height, centers, tolerance));
   const { keptSoup, mouthRim } = terminatorData(quickRelease);
+
+  // Pegs: validate, then precompute each peg's rings. The root ring (index
+  // 0, depth 0) doubles as the front cap's hole contour -- the same Point3
+  // objects' x/y feed both, so the seam is bit-identical by construction.
+  const pegFilletRadius = normalizeMulticonnectPegFilletRadius(options.pegFilletRadius);
+  const pegTiltRad = (normalizeMulticonnectPegTiltDeg(options.pegTiltDeg) * Math.PI) / 180;
+  const pegShear = Math.tan(pegTiltRad);
+  const pegList = normalizedPegs(options.pegs ?? [], width, height, cornerRadius, pegFilletRadius, Math.cos(pegTiltRad));
+  const pegBuilds = pegList.map((peg) => {
+    // Surface profile from the face rim inward: (radius, depth) pairs. The
+    // fillet is the quarter arc centered at (radius + fillet, fillet) in
+    // profile space -- tangent to the face plane at the rim and to the peg
+    // wall at (radius, fillet); both tangent rings use exact coordinates,
+    // interior rings come from the arc parametrization. Peg length is
+    // measured along the (sheared) centerline, so the tip sits at
+    // perpendicular depth length*cos(tilt).
+    const profile: [number, number][] = [[peg.radius + pegFilletRadius, 0]];
+    if (pegFilletRadius > 0) {
+      for (let step = 1; step < MULTICONNECT_PEG_FILLET_SEGMENTS; step += 1) {
+        const theta = Math.PI / 2 + (step * (Math.PI / 2)) / MULTICONNECT_PEG_FILLET_SEGMENTS;
+        profile.push([peg.radius + pegFilletRadius + pegFilletRadius * Math.cos(theta), pegFilletRadius - pegFilletRadius * Math.sin(theta)]);
+      }
+      profile.push([peg.radius, pegFilletRadius]);
+    }
+    profile.push([peg.radius, peg.length * Math.cos(pegTiltRad)]);
+    const rings = profile.map(([radius, depth]) => pegRing(peg, pegShear, radius, depth));
+    return { peg, profile, rings };
+  });
+  const pegHoles: Point2[][] = pegBuilds.map(({ rings }) => rings[0].map(([x, y]) => [x, y]));
 
   // THE shared transform: every slot-derived world coordinate -- baked
   // vertices, prism walls, cap notch boundaries -- goes through these exact
@@ -360,10 +543,15 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
   };
 
   if (cornerRadius === 0) {
-    // Front (container-side) face: one full uncut rectangle at Z=0 -- the
-    // blind guarantee. Nothing else in this builder emits geometry at Z < the
-    // blind floor plane.
-    pushRectangleCap(positions, [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], [0, 0, -1]);
+    // Front (container-side) face at Z=0 -- the blind guarantee: the only
+    // openings ever cut into it are peg roots, which are themselves closed
+    // by peg surfaces on the far side. Nothing in this builder emits
+    // geometry between the front face and the blind floor plane.
+    if (pegHoles.length === 0) {
+      pushRectangleCap(positions, [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], [0, 0, -1]);
+    } else {
+      pushCap(positions, [[0, 0], [width, 0], [width, height], [0, height]], ([x, y]) => [x, y, 0], [0, 0, -1], pegHoles);
+    }
     // Top edge and both side edges are never reached by slot geometry (the
     // dome stays >= ~2.1mm below the top edge, and slot centers stay
     // >= spacing/2 >= 12mm from the sides while the widest scaled head is
@@ -416,9 +604,9 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
     outline.push([0, cornerRadius]);
     pushArc(cornerRadius, cornerRadius, Math.PI, null); // closes back to outline[0]
 
-    // Front face: the full uncut rounded outline -- still the blind
-    // guarantee by construction.
-    pushCap(positions, outline, ([x, y]) => [x, y, 0], [0, 0, -1]);
+    // Front face: the full rounded outline -- still the blind guarantee by
+    // construction, with peg roots as the only (self-closed) openings.
+    pushCap(positions, outline, ([x, y]) => [x, y, 0], [0, 0, -1], pegHoles);
 
     // Mounting face: the rounded outline with the slot notches spliced into
     // its bottom edge (outline[0] -> outline[1]).
@@ -498,6 +686,12 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
         pushTriangle(positions, p0, p2, p3);
       }
     }
+  }
+
+  // Peg surfaces: fillet collar bands + wall + tip cap per peg, unioned by
+  // construction (the front cap's holes are these pegs' root rings).
+  for (const { peg, profile, rings } of pegBuilds) {
+    pushPegSurfaces(positions, peg, rings, profile, pegShear, pegFilletRadius);
   }
 
   return positions;

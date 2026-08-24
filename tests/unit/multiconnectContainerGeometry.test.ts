@@ -20,6 +20,11 @@ import { analyzeTriangleSoup } from "@/lib/svgImport";
 // from the mounting face down to the blind floor.
 
 const COUPON = { width: 60, height: 60 };
+const PEGS3 = [
+  { diameter: 6, length: 20, x: 15, z: 35 },
+  { diameter: 8, length: 20, x: 30, z: 35 },
+  { diameter: 10, length: 20, x: 45, z: 35 },
+];
 
 function depthCrossings(positions: readonly number[], x: number, y: number): number[] {
   const crossings: number[] = [];
@@ -57,6 +62,8 @@ const CONFIGS = [
   { label: "tolerance 0.925", options: { ...COUPON, slotTolerance: 0.925 } },
   { label: "tolerance 1.075", options: { ...COUPON, slotTolerance: 1.075 } },
   { label: "rounded corners r=5", options: { ...COUPON, cornerRadius: 5 } },
+  { label: "peg plate: 3 pegs, tilt 5, fillet 2, rounded", options: { ...COUPON, cornerRadius: 5, pegs: PEGS3 } },
+  { label: "peg plate: no fillet, no tilt", options: { ...COUPON, pegFilletRadius: 0, pegTiltDeg: 0, pegs: [{ diameter: 10, length: 30, x: 30, z: 30 }] } },
 ] as const;
 
 describe("createMulticonnectPlateGeometry", () => {
@@ -271,6 +278,102 @@ describe("createMulticonnectPlateGeometry", () => {
       }
     }
   }, 20000);
+
+  it("pegs=[] produces byte-identical Plate output (regression guard)", () => {
+    expect(multiconnectPlatePositions({ ...COUPON, pegs: [] })).toEqual(multiconnectPlatePositions(COUPON));
+    expect(multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: [] })).toEqual(multiconnectPlatePositions({ ...COUPON, cornerRadius: 5 }));
+  });
+
+  it("peg plate keeps the blind guarantee (sampler skips the sheared peg-body projections)", () => {
+    const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: PEGS3 });
+    const rise = 20 * Math.sin((5 * Math.PI) / 180) + 0.8;
+    const nearPeg = (x: number, y: number) =>
+      PEGS3.some((peg) => {
+        const footprint = peg.diameter / 2 + 2;
+        return Math.abs(x - peg.x) <= footprint + 0.8 && y - peg.z >= -(footprint + 0.8) && y - peg.z <= footprint + rise + 0.8;
+      });
+    const radius = 5;
+    const insideRounded = (x: number, y: number) => {
+      const centers: [number, number][] = [[radius, radius], [COUPON.width - radius, radius], [COUPON.width - radius, COUPON.height - radius], [radius, COUPON.height - radius]];
+      return centers.every(([ccx, ccy]) => {
+        const inCornerSquare = (x < radius || x > COUPON.width - radius) && (y < radius || y > COUPON.height - radius) && Math.abs(x - ccx) <= radius && Math.abs(y - ccy) <= radius;
+        return !inCornerSquare || Math.hypot(x - ccx, y - ccy) <= radius - 0.6;
+      });
+    };
+    let samples = 0;
+    for (let x = 1.3; x < COUPON.width; x += 2.9) {
+      for (let y = 1.7; y < COUPON.height; y += 2.9) {
+        if (!insideRounded(x, y) || nearPeg(x, y)) continue;
+        const crossings = depthCrossings(positions, x, y);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+        expect(isSolidAt(crossings, MULTICONNECT_BLIND_FLOOR_Z - 0.15)).toBe(true);
+        samples += 1;
+      }
+    }
+    expect(samples).toBeGreaterThan(200);
+  }, 20000);
+
+  it("peg body, fillet, and tip are where the parameters say (raycasts through the 10mm peg)", () => {
+    const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: PEGS3 });
+    const peg = PEGS3[2]; // d=10 at (45, 35)
+    const tiltRad = (5 * Math.PI) / 180;
+    const tipDepth = peg.length * Math.cos(tiltRad); // 19.92
+
+    // Through the peg center: solid from inside the peg through the plate.
+    const center = depthCrossings(positions, peg.x, peg.z);
+    expect(isSolidAt(center, -10)).toBe(true); // inside the peg body
+    expect(isSolidAt(center, -tipDepth - 0.5)).toBe(false); // beyond the tip
+    expect(isSolidAt(center, 1.2)).toBe(true); // front skin behind the root
+
+    // Just outside the footprint: air in front of the face.
+    const beside = depthCrossings(positions, peg.x + peg.diameter / 2 + 2 + 1.5, peg.z);
+    expect(isSolidAt(beside, -0.5)).toBe(false);
+    expect(isSolidAt(beside, 1.2)).toBe(true);
+
+    // Fillet collar: at 1mm outside the peg wall the quarter-round surface
+    // sits ~0.27mm in front of the face (45deg arc chord tolerance ~0.02).
+    const collar = depthCrossings(positions, peg.x + peg.diameter / 2 + 1, peg.z + 0.3);
+    expect(isSolidAt(collar, -0.15)).toBe(true);
+    expect(isSolidAt(collar, -0.45)).toBe(false);
+
+    // Tilt: the tip ring's top edge rises by ~length*sin(tilt) above the
+    // root circle's top edge; probe a point that is peg material only
+    // because of the upward shear.
+    const risen = depthCrossings(positions, peg.x, peg.z + peg.diameter / 2 + 0.8);
+    expect(isSolidAt(risen, -tipDepth + 1)).toBe(true); // sheared body covers it near the tip
+    expect(isSolidAt(risen, -0.5)).toBe(false); // but not at the root
+  });
+
+  it("rejects invalid peg layouts", () => {
+    const base = { ...COUPON, cornerRadius: 5 };
+    // Footprints overlap: d=10 fillet 2 -> footprint 7; centers 9mm apart.
+    expect(() => multiconnectPlatePositions({ ...base, pegs: [{ diameter: 10, length: 20, x: 26, z: 30 }, { diameter: 10, length: 20, x: 35, z: 30 }] })).toThrow(/overlap/);
+    // Straight-edge clearance: footprint 7 + 2mm keep-out needs 9mm.
+    expect(() => multiconnectPlatePositions({ ...base, pegs: [{ diameter: 10, length: 20, x: 8.9, z: 30 }] })).toThrow(/edge/);
+    // Rounded-corner clearance: passes on a sharp plate, fails inside the
+    // corner arc of a heavily rounded one. slotSpacing 50 centers the single
+    // slot so the corner radius clamp allows the full 12mm (the coupon's
+    // 28mm layout would clamp it to 5.35 before the peg check could see it).
+    const cornerPeg = [{ diameter: 4, length: 20, x: 6.5, z: 6.5 }];
+    expect(() => multiconnectPlatePositions({ ...COUPON, slotSpacing: 50, pegs: cornerPeg })).not.toThrow();
+    expect(() => multiconnectPlatePositions({ ...COUPON, slotSpacing: 50, cornerRadius: 12, pegs: cornerPeg })).toThrow(/edge/);
+    // Too short to clear its own fillet.
+    expect(() => multiconnectPlatePositions({ ...base, pegs: [{ diameter: 10, length: 2, x: 30, z: 30 }] })).toThrow(/short|fillet/);
+    // Nonsense values.
+    expect(() => multiconnectPlatePositions({ ...base, pegs: [{ diameter: -5, length: 20, x: 30, z: 30 }] })).toThrow(/finite|positive/);
+  });
+
+  it("peg plate bounding box extends to the tilted tip", () => {
+    const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: PEGS3 });
+    let minZ = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      minZ = Math.min(minZ, positions[i + 2]);
+      maxY = Math.max(maxY, positions[i + 1]);
+    }
+    expect(minZ).toBeCloseTo(-20 * Math.cos((5 * Math.PI) / 180), 6);
+    expect(maxY).toBe(COUPON.height); // pegs never outgrow the plate outline in Y
+  });
 
   it("createMulticonnectPlateGeometry returns a renderable BufferGeometry", () => {
     const geometry = createMulticonnectPlateGeometry(COUPON);
