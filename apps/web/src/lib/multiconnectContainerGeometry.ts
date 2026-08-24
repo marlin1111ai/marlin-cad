@@ -33,8 +33,11 @@ import {
 // test in tests/unit/multiconnectContainerGeometry.test.ts.
 //
 // World frame (matches the openConnect Container's convention): X = width
-// [0, W], Y = height [0, H], Z = thickness [0, 6.5] with the container-side
-// (front) face at Z=0 and the mounting face at Z=MOUNTING_FACE_Z. The slot
+// [0, W], Y = height [0, H], Z = thickness [0, plateThickness (default
+// 6.5)] with the container-side (front) face at Z=0 and the mounting face
+// at Z=plateThickness. ALL slot geometry is measured from the MOUNTING
+// face (see plateZPlanes), so extra thickness thickens the front skin
+// only. The slot
 // is a BLIND cut: it opens on the mounting face and out the bottom edge,
 // and the front face is emitted as one full uncut rectangle -- the "must
 // not perforate" requirement holds by construction, since a boundary rep
@@ -74,13 +77,14 @@ import {
 // the radial fit the tolerance knob exists for is scaled identically to
 // the SCAD.
 
+// Default AND minimum plate thickness (the SCAD's fixed 6.5mm back).
+// plateThickness may only grow it: the slot mechanism needs the full 4.15mm
+// cut depth plus the 2.35mm skin behind the blind floor.
 export const MULTICONNECT_BACK_THICKNESS = 6.5;
-// Material kept between the blind floor and the front face (the SCAD's
-// fixed 2.35mm skin; slotDepthMicroadjustment is pinned at 0).
+// Material kept between the blind floor and the front face AT THE DEFAULT
+// THICKNESS (the SCAD's fixed 2.35mm skin; slotDepthMicroadjustment is
+// pinned at 0). Extra plateThickness adds to this skin.
 export const MULTICONNECT_BLIND_FLOOR_Z = 2.35;
-// One shared derived value for every mounting-face coordinate, so the cap
-// plane and the transformed baked mouth rim can never disagree by a ULP.
-const MOUNTING_FACE_Z = MULTICONNECT_BLIND_FLOOR_Z + MULTICONNECT_SLOT_CUT_DEPTH;
 
 export const DEFAULT_MULTICONNECT_PLATE_WIDTH = 56;
 export const DEFAULT_MULTICONNECT_PLATE_HEIGHT = 56;
@@ -133,7 +137,7 @@ export type MulticonnectPeg = {
   // bottom edge (z maps to the geometry's Y axis).
   //
   // Viewed x is NOT geometry X. The plate mounts with its mounting face
-  // (Z = MOUNTING_FACE_Z) toward the wall, so the front face presented to
+  // (Z = plateThickness) toward the wall, so the front face presented to
   // the viewer is the geometry's X axis MIRRORED: viewed left edge =
   // geometry x = width. Physical test finding (peg sampler v1, 2026-08-24):
   // pegs specified left-to-right in geometry X came off the printer reading
@@ -152,6 +156,10 @@ export type MulticonnectPeg = {
 export type MulticonnectPlateOptions = {
   width?: number;
   height?: number;
+  // Plate thickness in mm, default/min 6.5. Extra thickness goes entirely
+  // to the front side; the mounting-face side (slot cut depth, dimple,
+  // channel) is unchanged. See plateZPlanes.
+  plateThickness?: number;
   slotSpacing?: number;
   slotQuickRelease?: boolean;
   slotTolerance?: number;
@@ -184,6 +192,24 @@ export function normalizeMulticonnectPlateWidth(value: number | undefined, slotS
 
 export function normalizeMulticonnectPlateHeight(value?: number): number {
   return clamp(finiteOr(value, DEFAULT_MULTICONNECT_PLATE_HEIGHT), MIN_MULTICONNECT_PLATE_DIMENSION, MAX_MULTICONNECT_PLATE_DIMENSION);
+}
+
+export function normalizeMulticonnectPlateThickness(value?: number): number {
+  return Math.max(MULTICONNECT_BACK_THICKNESS, finiteOr(value, MULTICONNECT_BACK_THICKNESS));
+}
+
+// The two Z planes every slot coordinate hangs off, for a given plate
+// thickness. ALL slot geometry is measured from the MOUNTING face (4.15mm
+// cut depth, dimple, channel cross-section exactly as at the default 6.5),
+// so extra thickness goes entirely into the front skin: the blind floor
+// moves away from the front face, never toward the slot. Both planes come
+// from this one expression path so the mounting-face cap and the
+// transformed baked mouth rim can never disagree by a ULP -- and at the
+// default thickness the `+ 0` keeps every coordinate byte-identical to the
+// original fixed-6.5 construction (regression-guarded in the tests).
+function plateZPlanes(thickness: number) {
+  const blindFloorZ = MULTICONNECT_BLIND_FLOOR_Z + (thickness - MULTICONNECT_BACK_THICKNESS);
+  return { blindFloorZ, mountingFaceZ: blindFloorZ + MULTICONNECT_SLOT_CUT_DEPTH };
 }
 
 // Largest corner radius that keeps every rounded corner clear of slot
@@ -223,7 +249,7 @@ export function multiconnectPlateDimensions(options: MulticonnectPlateOptions) {
   return {
     width,
     height,
-    depth: MOUNTING_FACE_Z,
+    depth: plateZPlanes(normalizeMulticonnectPlateThickness(options.plateThickness)).mountingFaceZ,
     maxCornerRadius,
     cornerRadius: normalizeMulticonnectCornerRadius(options.cornerRadius, maxCornerRadius),
   };
@@ -503,6 +529,7 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
   const height = normalizeMulticonnectPlateHeight(options.height);
   const tolerance = normalizeMulticonnectSlotTolerance(options.slotTolerance);
   const quickRelease = options.slotQuickRelease === true;
+  const { blindFloorZ, mountingFaceZ } = plateZPlanes(normalizeMulticonnectPlateThickness(options.plateThickness));
 
   const topCenterY = height - MULTICONNECT_SLOT_TOP_OFFSET;
   const centers = multiconnectSlotCenters(width, slotSpacing);
@@ -543,7 +570,7 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
   // expressions so shared seam vertices are bit-identical.
   const worldX = (cx: number, across: number) => cx + across * tolerance;
   const worldY = (slide: number) => topCenterY + slide * tolerance;
-  const worldZ = (depth: number) => MULTICONNECT_BLIND_FLOOR_Z + depth;
+  const worldZ = (depth: number) => blindFloorZ + depth;
 
   const positions: number[] = [];
   const notchOrder = [3, 2, 1, 0, 7, 6, 5, 4];
@@ -579,11 +606,11 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
     // dome stays >= ~2.1mm below the top edge, and slot centers stay
     // >= spacing/2 >= 12mm from the sides while the widest scaled head is
     // 10.91mm): full rectangles.
-    pushRectangleCap(positions, [[0, height, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [0, height, MOUNTING_FACE_Z]], [0, 1, 0]);
-    pushRectangleCap(positions, [[0, 0, 0], [0, height, 0], [0, height, MOUNTING_FACE_Z], [0, 0, MOUNTING_FACE_Z]], [-1, 0, 0]);
-    pushRectangleCap(positions, [[width, 0, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [width, 0, MOUNTING_FACE_Z]], [1, 0, 0]);
+    pushRectangleCap(positions, [[0, height, 0], [width, height, 0], [width, height, mountingFaceZ], [0, height, mountingFaceZ]], [0, 1, 0]);
+    pushRectangleCap(positions, [[0, 0, 0], [0, height, 0], [0, height, mountingFaceZ], [0, 0, mountingFaceZ]], [-1, 0, 0]);
+    pushRectangleCap(positions, [[width, 0, 0], [width, height, 0], [width, height, mountingFaceZ], [width, 0, mountingFaceZ]], [1, 0, 0]);
 
-    // Mounting face (Z = MOUNTING_FACE_Z): rectangle with one notch per slot
+    // Mounting face (Z = mountingFaceZ): rectangle with one notch per slot
     // opening through the bottom edge -- straight strip sides matching the
     // channel prism's neck walls, closed over the top by the baked mouth rim
     // polyline (whose first/last points ARE the strip corners at the clip
@@ -592,16 +619,16 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
     const mountingContour: Point2[] = [[0, 0]];
     pushMountingNotches(mountingContour);
     mountingContour.push([width, 0], [width, height], [0, height]);
-    pushCap(positions, mountingContour, ([x, y]) => [x, y, MOUNTING_FACE_Z], [0, 0, 1]);
+    pushCap(positions, mountingContour, ([x, y]) => [x, y, mountingFaceZ], [0, 0, 1]);
 
     // Bottom edge (Y = 0): rectangle with one keyhole notch per slot opening
-    // through its mounting-face edge. Traversed along Z = MOUNTING_FACE_Z from
+    // through its mounting-face edge. Traversed along Z = mountingFaceZ from
     // x = width back to 0, diving around each channel cross-section
     // (MULTICONNECT_CHANNEL_OUTLINE indices 3..0 then 7..4 -- everything
     // except the open neck-top edge).
-    const bottomContour: Point2[] = [[0, 0], [width, 0], [width, MOUNTING_FACE_Z]];
+    const bottomContour: Point2[] = [[0, 0], [width, 0], [width, mountingFaceZ]];
     pushBottomNotches(bottomContour);
-    bottomContour.push([0, MOUNTING_FACE_Z]);
+    bottomContour.push([0, mountingFaceZ]);
     pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
   } else {
     // Rounded corners: the plate outline becomes a rounded rectangle (CCW,
@@ -636,13 +663,13 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
     const mountingContour: Point2[] = [outline[0]];
     pushMountingNotches(mountingContour);
     for (let i = 1; i < outline.length; i += 1) mountingContour.push(outline[i]);
-    pushCap(positions, mountingContour, ([x, y]) => [x, y, MOUNTING_FACE_Z], [0, 0, 1]);
+    pushCap(positions, mountingContour, ([x, y]) => [x, y, mountingFaceZ], [0, 0, 1]);
 
     // Bottom face: now spans only the straight run between the two bottom
     // arcs, reusing the outline's own endpoint doubles for the seam.
-    const bottomContour: Point2[] = [[outline[0][0], 0], [outline[1][0], 0], [outline[1][0], MOUNTING_FACE_Z]];
+    const bottomContour: Point2[] = [[outline[0][0], 0], [outline[1][0], 0], [outline[1][0], mountingFaceZ]];
     pushBottomNotches(bottomContour);
-    bottomContour.push([outline[0][0], MOUNTING_FACE_Z]);
+    bottomContour.push([outline[0][0], mountingFaceZ]);
     pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
 
     // Perimeter walls: one quad per outline edge except the bottom edge
@@ -653,8 +680,8 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
       const q = outline[(i + 1) % outline.length];
       const p0: Point3 = [p[0], p[1], 0];
       const p1: Point3 = [q[0], q[1], 0];
-      const p2: Point3 = [q[0], q[1], MOUNTING_FACE_Z];
-      const p3: Point3 = [p[0], p[1], MOUNTING_FACE_Z];
+      const p2: Point3 = [q[0], q[1], mountingFaceZ];
+      const p3: Point3 = [p[0], p[1], mountingFaceZ];
       const outward: Point3 = [q[1] - p[1], -(q[0] - p[0]), 0];
       const normal = triangleNormal(p0, p1, p2);
       const dot = normal[0] * outward[0] + normal[1] * outward[1] + normal[2] * outward[2];

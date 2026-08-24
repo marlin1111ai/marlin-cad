@@ -11,6 +11,7 @@ import {
   MULTICONNECT_BLIND_FLOOR_Z,
   MULTICONNECT_SLOT_TOP_OFFSET,
 } from "@/lib/multiconnectContainerGeometry";
+import { MULTICONNECT_SLOT_CUT_DEPTH } from "@/lib/multiconnectSlotMesh";
 import { analyzeTriangleSoup } from "@/lib/svgImport";
 
 // The Multiconnect slot is a BLIND cut -- the opposite acceptance from the
@@ -64,7 +65,14 @@ const CONFIGS = [
   { label: "rounded corners r=5", options: { ...COUPON, cornerRadius: 5 } },
   { label: "peg plate: 3 pegs, tilt 5, fillet 2, rounded", options: { ...COUPON, cornerRadius: 5, pegs: PEGS3 } },
   { label: "peg plate: no fillet, no tilt", options: { ...COUPON, pegFilletRadius: 0, pegTiltDeg: 0, pegs: [{ diameter: 10, length: 30, x: 30, z: 30 }] } },
+  { label: "thick plate 10mm", options: { ...COUPON, plateThickness: 10 } },
+  { label: "thick peg plate 10mm, rounded", options: { ...COUPON, plateThickness: 10, cornerRadius: 5, pegs: PEGS3 } },
 ] as const;
+
+// Replicates plateZPlanes' exact expression path so plane-membership checks
+// can use exact equality against the builder's own doubles.
+const blindFloorZFor = (thickness: number) => MULTICONNECT_BLIND_FLOOR_Z + (thickness - MULTICONNECT_BACK_THICKNESS);
+const mountingFaceZFor = (thickness: number) => blindFloorZFor(thickness) + MULTICONNECT_SLOT_CUT_DEPTH;
 
 describe("createMulticonnectPlateGeometry", () => {
   it.each(CONFIGS)("$label: watertight manifold (0 boundary edges, 0 non-manifold edges)", ({ options }) => {
@@ -278,6 +286,75 @@ describe("createMulticonnectPlateGeometry", () => {
       }
     }
   }, 20000);
+
+  it("plateThickness: default and clamped values are byte-identical to the 6.5 plate", () => {
+    const base = multiconnectPlatePositions(COUPON);
+    expect(multiconnectPlatePositions({ ...COUPON, plateThickness: 6.5 })).toEqual(base);
+    // Below the 6.5 minimum clamps up to the default construction.
+    expect(multiconnectPlatePositions({ ...COUPON, plateThickness: 4 })).toEqual(base);
+    expect(multiconnectPlateDimensions({ ...COUPON, plateThickness: 3 }).depth).toBe(multiconnectPlateDimensions(COUPON).depth);
+    // A genuinely thicker plate changes the mesh and the reported depth.
+    expect(multiconnectPlatePositions({ ...COUPON, plateThickness: 10 })).not.toEqual(base);
+    expect(multiconnectPlateDimensions({ ...COUPON, plateThickness: 10 }).depth).toBe(mountingFaceZFor(10));
+  });
+
+  it("plateThickness 10: deeper solid band, channel open exactly the cut depth from the mounting face", () => {
+    const positions = multiconnectPlatePositions({ ...COUPON, plateThickness: 10 });
+    const blindFloor = blindFloorZFor(10); // 5.85: the extra 3.5mm all lands in the front skin
+    const mountingFace = mountingFaceZFor(10);
+    const topCenterY = COUPON.height - MULTICONNECT_SLOT_TOP_OFFSET;
+    // Blind guarantee across the full footprint, now through the deeper band.
+    for (let x = 1; x < COUPON.width; x += 2.9) {
+      for (let y = 1; y < COUPON.height; y += 2.9) {
+        const crossings = depthCrossings(positions, x, y);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+        expect(isSolidAt(crossings, blindFloor - 0.15)).toBe(true);
+      }
+    }
+    // In-channel: the void spans exactly (blind floor, mounting face) --
+    // 4.15mm of cut measured from the mounting face, and no deeper.
+    for (const cx of multiconnectSlotCenters(COUPON.width, 28)) {
+      for (const [x, y] of [[cx, 3], [cx - 6.5, 20], [cx + 6.5, 20], [cx, topCenterY + 4]] as const) {
+        const crossings = depthCrossings(positions, x, y);
+        expect(crossings.filter((z) => z > blindFloor + 1e-3 && z < mountingFace - 1e-3)).toEqual([]);
+        expect(crossings.some((z) => Math.abs(z - blindFloor) < 1e-6)).toBe(true);
+        expect(isSolidAt(crossings, blindFloor - 0.15)).toBe(true);
+        expect(isSolidAt(crossings, blindFloor + 1)).toBe(false);
+      }
+    }
+  }, 20000);
+
+  it("slot cross-section at the mounting face is identical between thickness 6.5 and 10", () => {
+    // Distinct points only: adjacent faces (e.g. the taller bottom face)
+    // earcut differently at different aspect ratios, so per-vertex
+    // multiplicities on the plane legitimately vary -- the cross-section
+    // GEOMETRY (which exact x,y doubles lie on the mounting face) must not.
+    const xyOnPlane = (positions: number[], planeZ: number) => {
+      const xy = new Set<string>();
+      for (let i = 0; i + 2 < positions.length; i += 3) {
+        if (positions[i + 2] === planeZ) xy.add(`${positions[i]},${positions[i + 1]}`);
+      }
+      return [...xy].sort();
+    };
+    const thin = xyOnPlane(multiconnectPlatePositions(COUPON), mountingFaceZFor(6.5));
+    const thick = xyOnPlane(multiconnectPlatePositions({ ...COUPON, plateThickness: 10 }), mountingFaceZFor(10));
+    // 64 distinct points: two slots' mouth-rim polylines + strip corners +
+    // the plate outline corners.
+    expect(thin.length).toBeGreaterThan(50);
+    expect(thick).toEqual(thin);
+  });
+
+  it("plateThickness 10 bounding box reaches exactly the thicker mounting face", () => {
+    const positions = multiconnectPlatePositions({ ...COUPON, plateThickness: 10 });
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      minZ = Math.min(minZ, positions[i + 2]);
+      maxZ = Math.max(maxZ, positions[i + 2]);
+    }
+    expect(minZ).toBe(0); // front face stays at Z=0; pegs would extend below
+    expect(maxZ).toBe(mountingFaceZFor(10));
+  });
 
   it("pegs=[] produces byte-identical Plate output (regression guard)", () => {
     expect(multiconnectPlatePositions({ ...COUPON, pegs: [] })).toEqual(multiconnectPlatePositions(COUPON));
