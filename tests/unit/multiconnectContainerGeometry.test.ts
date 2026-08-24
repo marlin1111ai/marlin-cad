@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createMulticonnectPlateGeometry,
+  multiconnectMaxCornerRadius,
   multiconnectPlateDimensions,
   multiconnectPlatePositions,
   multiconnectSlotCenters,
@@ -55,6 +56,7 @@ const CONFIGS = [
   { label: "quick release 60x60", options: { ...COUPON, slotQuickRelease: true } },
   { label: "tolerance 0.925", options: { ...COUPON, slotTolerance: 0.925 } },
   { label: "tolerance 1.075", options: { ...COUPON, slotTolerance: 1.075 } },
+  { label: "rounded corners r=5", options: { ...COUPON, cornerRadius: 5 } },
 ] as const;
 
 describe("createMulticonnectPlateGeometry", () => {
@@ -213,6 +215,62 @@ describe("createMulticonnectPlateGeometry", () => {
       for (const z of [0.5, 3.25, 6.2]) expect(isSolidAt(crossings, z)).toBe(true);
     }
   });
+
+  it("cornerRadius 0 reproduces the phase-2 output exactly (regression guard for the printed coupon)", () => {
+    const sharp = multiconnectPlatePositions(COUPON);
+    expect(multiconnectPlatePositions({ ...COUPON, cornerRadius: 0 })).toEqual(sharp);
+    // Snap-under-threshold radii are sharp too; a real radius changes the mesh.
+    expect(multiconnectPlatePositions({ ...COUPON, cornerRadius: 0.05 })).toEqual(sharp);
+    expect(multiconnectPlatePositions({ ...COUPON, cornerRadius: 5 })).not.toEqual(sharp);
+    // Anchor against the exact triangle count the printed coupon shipped with.
+    expect(sharp.length).toBe(696 * 9);
+  });
+
+  it("rounded plate keeps the blind guarantee across the rounded footprint", () => {
+    const radius = 5;
+    const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: radius });
+    const insideRounded = (x: number, y: number, margin: number) => {
+      const cornerCenters: [number, number][] = [[radius, radius], [COUPON.width - radius, radius], [COUPON.width - radius, COUPON.height - radius], [radius, COUPON.height - radius]];
+      for (const [ccx, ccy] of cornerCenters) {
+        const inCornerSquare = (x < radius || x > COUPON.width - radius) && (y < radius || y > COUPON.height - radius) && Math.abs(x - ccx) <= radius && Math.abs(y - ccy) <= radius;
+        if (inCornerSquare && Math.hypot(x - ccx, y - ccy) > radius - margin) return false;
+      }
+      return true;
+    };
+    let samples = 0;
+    for (let x = 1.3; x < COUPON.width; x += 2.9) {
+      for (let y = 1.7; y < COUPON.height; y += 2.9) {
+        if (!insideRounded(x, y, 0.6)) continue;
+        const crossings = depthCrossings(positions, x, y);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+        expect(isSolidAt(crossings, MULTICONNECT_BLIND_FLOOR_Z - 0.15)).toBe(true);
+        samples += 1;
+      }
+    }
+    expect(samples).toBeGreaterThan(350);
+  }, 20000);
+
+  it("oversized cornerRadius clamps to the exposed safe max and channels stay open", () => {
+    const dims = multiconnectPlateDimensions({ ...COUPON, cornerRadius: 50 });
+    // Coupon safe max: outer slot center to side edge (16) minus the head
+    // half-width (10.15) minus the 0.5 clearance.
+    expect(dims.maxCornerRadius).toBeCloseTo(5.35, 9);
+    expect(dims.cornerRadius).toBeCloseTo(5.35, 9);
+    expect(multiconnectMaxCornerRadius(COUPON)).toBeCloseTo(5.35, 9);
+
+    const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 50 });
+    const analysis = analyzeTriangleSoup(positions);
+    expect(analysis.boundaryEdges).toBe(0);
+    expect(analysis.nonManifoldEdges).toBe(0);
+    const topCenterY = COUPON.height - MULTICONNECT_SLOT_TOP_OFFSET;
+    for (const cx of multiconnectSlotCenters(COUPON.width, 28)) {
+      for (const [x, y] of [[cx, 3], [cx - 6.5, 20], [cx + 6.5, 20], [cx, topCenterY - 3]] as const) {
+        const crossings = depthCrossings(positions, x, y);
+        expect(crossings.filter((z) => z > MULTICONNECT_BLIND_FLOOR_Z + 1e-3 && z < MULTICONNECT_BACK_THICKNESS - 1e-3)).toEqual([]);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+      }
+    }
+  }, 20000);
 
   it("createMulticonnectPlateGeometry returns a renderable BufferGeometry", () => {
     const geometry = createMulticonnectPlateGeometry(COUPON);

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   MULTICONNECT_CHANNEL_OUTLINE,
+  MULTICONNECT_HEAD_RADIUS,
   MULTICONNECT_SLOT_CUT_DEPTH,
   MULTICONNECT_TERMINATOR_CLIP_Y,
   MULTICONNECT_TERMINATOR_NO_DIMPLE_INDICES,
@@ -40,6 +41,14 @@ import {
 // only has the holes it explicitly cuts. The baked blind-floor/crater
 // triangulation is carried through verbatim (transform + winding reversal
 // only, never re-derived).
+//
+// cornerRadius (default 0 = sharp) rounds all four plate corners with
+// quarter-circle arcs in the 2D outline; the caps and perimeter walls all
+// follow the rounded outline through the same earcut/quad path. The radius
+// is clamped by maxCornerRadiusFor so no arc can reach slot geometry
+// (exposed as multiconnectPlateDimensions().maxCornerRadius for the future
+// UI). cornerRadius === 0 takes the exact construction the printed phase-2
+// coupon verified, byte for byte.
 //
 // slotTolerance is applied as a PLANAR (across/slide) scale about each
 // slot's round-top center, deliberately NOT scaling the through-wall depth
@@ -81,6 +90,14 @@ export const MAX_MULTICONNECT_SLOT_TOLERANCE = 1.075;
 // Round-top center sits this far below the plate's top edge (SCAD:
 // backHeight - 13).
 export const MULTICONNECT_SLOT_TOP_OFFSET = 13;
+// Corner rounding: quarter-circle arcs on the plate outline. Segment count
+// per corner, the minimum kept between a rounded corner's straight span and
+// any slot keyhole's widest (head-radius) extent, and the threshold under
+// which a requested radius snaps to a sharp corner (micro-arcs would only
+// produce sliver walls).
+export const MULTICONNECT_CORNER_SEGMENTS = 10;
+export const MULTICONNECT_CORNER_SLOT_CLEARANCE = 0.5;
+const MIN_EFFECTIVE_CORNER_RADIUS = 0.1;
 
 export type MulticonnectPlateOptions = {
   width?: number;
@@ -88,6 +105,7 @@ export type MulticonnectPlateOptions = {
   slotSpacing?: number;
   slotQuickRelease?: boolean;
   slotTolerance?: number;
+  cornerRadius?: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -115,12 +133,46 @@ export function normalizeMulticonnectPlateHeight(value?: number): number {
   return clamp(finiteOr(value, DEFAULT_MULTICONNECT_PLATE_HEIGHT), MIN_MULTICONNECT_PLATE_DIMENSION, MAX_MULTICONNECT_PLATE_DIMENSION);
 }
 
+// Largest corner radius that keeps every rounded corner clear of slot
+// geometry: the corner arcs must not eat into the bottom edge's channel
+// notches or the keyhole head recesses running beside them, so the radius
+// stays inside the gap between each outer slot's widest extent and its
+// nearest side edge (which also keeps the top corners clear of the slot
+// domes -- same X separation, and the layout is why one bound covers all
+// four corners). Also capped at half the smaller plate dimension, minus a
+// hair so opposite arcs never collapse the straight span between them.
+function maxCornerRadiusFor(width: number, height: number, centers: number[], tolerance: number): number {
+  const headHalfWidth = MULTICONNECT_HEAD_RADIUS * tolerance;
+  const slotClearance = Math.min(centers[0] - headHalfWidth, width - centers[centers.length - 1] - headHalfWidth) - MULTICONNECT_CORNER_SLOT_CLEARANCE;
+  return Math.max(0, Math.min(Math.min(width, height) / 2 - 0.05, slotClearance));
+}
+
+export function multiconnectMaxCornerRadius(options: MulticonnectPlateOptions = {}): number {
+  const slotSpacing = normalizeMulticonnectSlotSpacing(options.slotSpacing);
+  const width = normalizeMulticonnectPlateWidth(options.width, slotSpacing);
+  const height = normalizeMulticonnectPlateHeight(options.height);
+  const tolerance = normalizeMulticonnectSlotTolerance(options.slotTolerance);
+  return maxCornerRadiusFor(width, height, multiconnectSlotCenters(width, slotSpacing), tolerance);
+}
+
+export function normalizeMulticonnectCornerRadius(value: number | undefined, maxRadius: number): number {
+  const radius = finiteOr(value, 0);
+  if (radius < MIN_EFFECTIVE_CORNER_RADIUS) return 0;
+  return Math.min(radius, maxRadius);
+}
+
 export function multiconnectPlateDimensions(options: MulticonnectPlateOptions) {
   const slotSpacing = normalizeMulticonnectSlotSpacing(options.slotSpacing);
+  const width = normalizeMulticonnectPlateWidth(options.width, slotSpacing);
+  const height = normalizeMulticonnectPlateHeight(options.height);
+  const tolerance = normalizeMulticonnectSlotTolerance(options.slotTolerance);
+  const maxCornerRadius = maxCornerRadiusFor(width, height, multiconnectSlotCenters(width, slotSpacing), tolerance);
   return {
-    width: normalizeMulticonnectPlateWidth(options.width, slotSpacing),
-    height: normalizeMulticonnectPlateHeight(options.height),
+    width,
+    height,
     depth: MOUNTING_FACE_Z,
+    maxCornerRadius,
+    cornerRadius: normalizeMulticonnectCornerRadius(options.cornerRadius, maxCornerRadius),
   };
 }
 
@@ -277,6 +329,7 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
 
   const topCenterY = height - MULTICONNECT_SLOT_TOP_OFFSET;
   const centers = multiconnectSlotCenters(width, slotSpacing);
+  const cornerRadius = normalizeMulticonnectCornerRadius(options.cornerRadius, maxCornerRadiusFor(width, height, centers, tolerance));
   const { keptSoup, mouthRim } = terminatorData(quickRelease);
 
   // THE shared transform: every slot-derived world coordinate -- baked
@@ -287,51 +340,122 @@ export function multiconnectPlatePositions(options: MulticonnectPlateOptions = {
   const worldZ = (depth: number) => MULTICONNECT_BLIND_FLOOR_Z + depth;
 
   const positions: number[] = [];
-
-  // Front (container-side) face: one full uncut rectangle at Z=0 -- the
-  // blind guarantee. Nothing else in this builder emits geometry at Z < the
-  // blind floor plane.
-  pushRectangleCap(positions, [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], [0, 0, -1]);
-  // Top edge and both side edges are never reached by slot geometry (the
-  // dome stays >= ~2.1mm below the top edge, and slot centers stay
-  // >= spacing/2 >= 12mm from the sides while the widest scaled head is
-  // 10.91mm): full rectangles.
-  pushRectangleCap(positions, [[0, height, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [0, height, MOUNTING_FACE_Z]], [0, 1, 0]);
-  pushRectangleCap(positions, [[0, 0, 0], [0, height, 0], [0, height, MOUNTING_FACE_Z], [0, 0, MOUNTING_FACE_Z]], [-1, 0, 0]);
-  pushRectangleCap(positions, [[width, 0, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [width, 0, MOUNTING_FACE_Z]], [1, 0, 0]);
-
-  // Mounting face (Z = MOUNTING_FACE_Z): rectangle with one notch per slot
-  // opening through the bottom edge -- straight strip sides matching the
-  // channel prism's neck walls, closed over the top by the baked mouth rim
-  // polyline (whose first/last points ARE the strip corners at the clip
-  // plane, so the strip side edge is split there exactly like the
-  // neighboring surfaces expect).
-  const mountingContour: Point2[] = [[0, 0]];
-  for (const cx of centers) {
-    const stripLeftX = worldX(cx, mouthRim[0][0]);
-    const stripRightX = worldX(cx, mouthRim[mouthRim.length - 1][0]);
-    mountingContour.push([stripLeftX, 0]);
-    for (const [across, slide] of mouthRim) mountingContour.push([worldX(cx, across), worldY(slide)]);
-    mountingContour.push([stripRightX, 0]);
-  }
-  mountingContour.push([width, 0], [width, height], [0, height]);
-  pushCap(positions, mountingContour, ([x, y]) => [x, y, MOUNTING_FACE_Z], [0, 0, 1]);
-
-  // Bottom edge (Y = 0): rectangle with one keyhole notch per slot opening
-  // through its mounting-face edge. Traversed along Z = MOUNTING_FACE_Z from
-  // x = width back to 0, diving around each channel cross-section
-  // (MULTICONNECT_CHANNEL_OUTLINE indices 3..0 then 7..4 -- everything
-  // except the open neck-top edge).
-  const bottomContour: Point2[] = [[0, 0], [width, 0], [width, MOUNTING_FACE_Z]];
   const notchOrder = [3, 2, 1, 0, 7, 6, 5, 4];
-  for (const cx of [...centers].reverse()) {
-    for (const outlineIndex of notchOrder) {
-      const [across, depth] = MULTICONNECT_CHANNEL_OUTLINE[outlineIndex];
-      bottomContour.push([worldX(cx, across), worldZ(depth)]);
+  const pushMountingNotches = (contour: Point2[]) => {
+    for (const cx of centers) {
+      const stripLeftX = worldX(cx, mouthRim[0][0]);
+      const stripRightX = worldX(cx, mouthRim[mouthRim.length - 1][0]);
+      contour.push([stripLeftX, 0]);
+      for (const [across, slide] of mouthRim) contour.push([worldX(cx, across), worldY(slide)]);
+      contour.push([stripRightX, 0]);
+    }
+  };
+  const pushBottomNotches = (contour: Point2[]) => {
+    for (const cx of [...centers].reverse()) {
+      for (const outlineIndex of notchOrder) {
+        const [across, depth] = MULTICONNECT_CHANNEL_OUTLINE[outlineIndex];
+        contour.push([worldX(cx, across), worldZ(depth)]);
+      }
+    }
+  };
+
+  if (cornerRadius === 0) {
+    // Front (container-side) face: one full uncut rectangle at Z=0 -- the
+    // blind guarantee. Nothing else in this builder emits geometry at Z < the
+    // blind floor plane.
+    pushRectangleCap(positions, [[0, 0, 0], [width, 0, 0], [width, height, 0], [0, height, 0]], [0, 0, -1]);
+    // Top edge and both side edges are never reached by slot geometry (the
+    // dome stays >= ~2.1mm below the top edge, and slot centers stay
+    // >= spacing/2 >= 12mm from the sides while the widest scaled head is
+    // 10.91mm): full rectangles.
+    pushRectangleCap(positions, [[0, height, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [0, height, MOUNTING_FACE_Z]], [0, 1, 0]);
+    pushRectangleCap(positions, [[0, 0, 0], [0, height, 0], [0, height, MOUNTING_FACE_Z], [0, 0, MOUNTING_FACE_Z]], [-1, 0, 0]);
+    pushRectangleCap(positions, [[width, 0, 0], [width, height, 0], [width, height, MOUNTING_FACE_Z], [width, 0, MOUNTING_FACE_Z]], [1, 0, 0]);
+
+    // Mounting face (Z = MOUNTING_FACE_Z): rectangle with one notch per slot
+    // opening through the bottom edge -- straight strip sides matching the
+    // channel prism's neck walls, closed over the top by the baked mouth rim
+    // polyline (whose first/last points ARE the strip corners at the clip
+    // plane, so the strip side edge is split there exactly like the
+    // neighboring surfaces expect).
+    const mountingContour: Point2[] = [[0, 0]];
+    pushMountingNotches(mountingContour);
+    mountingContour.push([width, 0], [width, height], [0, height]);
+    pushCap(positions, mountingContour, ([x, y]) => [x, y, MOUNTING_FACE_Z], [0, 0, 1]);
+
+    // Bottom edge (Y = 0): rectangle with one keyhole notch per slot opening
+    // through its mounting-face edge. Traversed along Z = MOUNTING_FACE_Z from
+    // x = width back to 0, diving around each channel cross-section
+    // (MULTICONNECT_CHANNEL_OUTLINE indices 3..0 then 7..4 -- everything
+    // except the open neck-top edge).
+    const bottomContour: Point2[] = [[0, 0], [width, 0], [width, MOUNTING_FACE_Z]];
+    pushBottomNotches(bottomContour);
+    bottomContour.push([0, MOUNTING_FACE_Z]);
+    pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
+  } else {
+    // Rounded corners: the plate outline becomes a rounded rectangle (CCW,
+    // starting at the bottom edge's left end). Arc interior points come from
+    // the angle parametrization, but every arc ENDPOINT is pushed as the
+    // exact straight-edge coordinate -- Math.cos(PI/2) is 6e-17, not 0, and
+    // a corner seam off by an ULP would fail the exact directed-edge
+    // stitching contract. maxCornerRadiusFor keeps every arc clear of slot
+    // geometry, so the notch walks are unchanged from the sharp path.
+    const outline: Point2[] = [[cornerRadius, 0], [width - cornerRadius, 0]];
+    const pushArc = (centerX: number, centerY: number, startAngle: number, endPoint: Point2 | null) => {
+      for (let step = 1; step < MULTICONNECT_CORNER_SEGMENTS; step += 1) {
+        const angle = startAngle + (step * (Math.PI / 2)) / MULTICONNECT_CORNER_SEGMENTS;
+        outline.push([centerX + cornerRadius * Math.cos(angle), centerY + cornerRadius * Math.sin(angle)]);
+      }
+      if (endPoint) outline.push(endPoint);
+    };
+    pushArc(width - cornerRadius, cornerRadius, -Math.PI / 2, [width, cornerRadius]);
+    outline.push([width, height - cornerRadius]);
+    pushArc(width - cornerRadius, height - cornerRadius, 0, [width - cornerRadius, height]);
+    outline.push([cornerRadius, height]);
+    pushArc(cornerRadius, height - cornerRadius, Math.PI / 2, [0, height - cornerRadius]);
+    outline.push([0, cornerRadius]);
+    pushArc(cornerRadius, cornerRadius, Math.PI, null); // closes back to outline[0]
+
+    // Front face: the full uncut rounded outline -- still the blind
+    // guarantee by construction.
+    pushCap(positions, outline, ([x, y]) => [x, y, 0], [0, 0, -1]);
+
+    // Mounting face: the rounded outline with the slot notches spliced into
+    // its bottom edge (outline[0] -> outline[1]).
+    const mountingContour: Point2[] = [outline[0]];
+    pushMountingNotches(mountingContour);
+    for (let i = 1; i < outline.length; i += 1) mountingContour.push(outline[i]);
+    pushCap(positions, mountingContour, ([x, y]) => [x, y, MOUNTING_FACE_Z], [0, 0, 1]);
+
+    // Bottom face: now spans only the straight run between the two bottom
+    // arcs, reusing the outline's own endpoint doubles for the seam.
+    const bottomContour: Point2[] = [[outline[0][0], 0], [outline[1][0], 0], [outline[1][0], MOUNTING_FACE_Z]];
+    pushBottomNotches(bottomContour);
+    bottomContour.push([outline[0][0], MOUNTING_FACE_Z]);
+    pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
+
+    // Perimeter walls: one quad per outline edge except the bottom edge
+    // (edge 0), whose surface is the notched bottom face above. For the CCW
+    // outline the outward direction is the edge direction rotated -90deg.
+    for (let i = 1; i < outline.length; i += 1) {
+      const p = outline[i];
+      const q = outline[(i + 1) % outline.length];
+      const p0: Point3 = [p[0], p[1], 0];
+      const p1: Point3 = [q[0], q[1], 0];
+      const p2: Point3 = [q[0], q[1], MOUNTING_FACE_Z];
+      const p3: Point3 = [p[0], p[1], MOUNTING_FACE_Z];
+      const outward: Point3 = [q[1] - p[1], -(q[0] - p[0]), 0];
+      const normal = triangleNormal(p0, p1, p2);
+      const dot = normal[0] * outward[0] + normal[1] * outward[1] + normal[2] * outward[2];
+      if (dot < 0) {
+        pushTriangle(positions, p0, p2, p1);
+        pushTriangle(positions, p0, p3, p2);
+      } else {
+        pushTriangle(positions, p0, p1, p2);
+        pushTriangle(positions, p0, p2, p3);
+      }
     }
   }
-  bottomContour.push([0, MOUNTING_FACE_Z]);
-  pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
 
   // Per-slot interior surfaces.
   for (const cx of centers) {
