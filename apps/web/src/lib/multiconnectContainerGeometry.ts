@@ -50,6 +50,9 @@ import {
 // tilts pegs upward via a shear (see pegRing), pegFilletRadius sets the
 // root collar, and normalizedPegs rejects layouts whose footprints
 // overlap, leave the outline, or crowd the edges below the 2mm keep-out.
+// Peg x is specified in AS-MOUNTED VIEW SPACE and mirrored to geometry X
+// inside normalizedPegs -- see the MOUNTED-VIEW X CONVENTION block on
+// MulticonnectPeg before touching anything x-addressed on the front face.
 //
 // cornerRadius (default 0 = sharp) rounds all four plate corners with
 // quarter-circle arcs in the 2D outline; the caps and perimeter walls all
@@ -123,9 +126,25 @@ export const MULTICONNECT_PEG_GAP = 0.1;
 export type MulticonnectPeg = {
   diameter: number;
   length: number;
-  // Peg center on the front face: x from the plate's left edge, z from its
-  // bottom edge (named from the mounted-wall perspective; z maps to the
-  // geometry's Y axis).
+  // ===================== MOUNTED-VIEW X CONVENTION ======================
+  // Peg center on the front face, in AS-MOUNTED VIEW SPACE: x is measured
+  // from the plate's LEFT edge as the viewer standing in front of the
+  // MOUNTED plate sees it (mounting face against the wall), z from the
+  // bottom edge (z maps to the geometry's Y axis).
+  //
+  // Viewed x is NOT geometry X. The plate mounts with its mounting face
+  // (Z = MOUNTING_FACE_Z) toward the wall, so the front face presented to
+  // the viewer is the geometry's X axis MIRRORED: viewed left edge =
+  // geometry x = width. Physical test finding (peg sampler v1, 2026-08-24):
+  // pegs specified left-to-right in geometry X came off the printer reading
+  // right-to-left on the wall. Front-face x-addressed features must
+  // therefore be specified in view space and mirrored internally --
+  // normalizedPegs is the ONE place the mirror happens
+  // (x_geometry = plateWidth - x_viewed). Do NOT "simplify" the mirror
+  // away: without it the API is wrong in exactly the way the printed
+  // sampler proved. Slots need no equivalent because the centering formula
+  // makes their layout mirror-symmetric.
+  // ======================================================================
   x: number;
   z: number;
 };
@@ -396,13 +415,17 @@ function normalizedPegs(pegs: MulticonnectPeg[], width: number, height: number, 
     if (length * tiltCos <= filletRadius + 0.5) {
       throw new Error(`multiconnect peg ${index}: length ${length} is too short to clear the ${filletRadius}mm fillet`);
     }
+    // MOUNTED-VIEW MIRROR -- the one place viewed-space x (see
+    // MulticonnectPeg) becomes geometry X. Everything downstream of this
+    // line works in geometry space only.
+    const geometryX = width - x;
     const radius = diameter / 2;
     const footprint = radius + filletRadius;
-    const inside = roundedRectInsideDistance(x, z, width, height, cornerRadius);
+    const inside = roundedRectInsideDistance(geometryX, z, width, height, cornerRadius);
     if (inside < footprint + MULTICONNECT_PEG_EDGE_CLEARANCE) {
       throw new Error(`multiconnect peg ${index}: footprint (r=${footprint}mm) is within ${MULTICONNECT_PEG_EDGE_CLEARANCE}mm of the plate edge`);
     }
-    result.push({ x, y: z, radius, length });
+    result.push({ x: geometryX, y: z, radius, length });
   });
   for (let i = 0; i < result.length; i += 1) {
     for (let j = i + 1; j < result.length; j += 1) {

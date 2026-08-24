@@ -287,10 +287,12 @@ describe("createMulticonnectPlateGeometry", () => {
   it("peg plate keeps the blind guarantee (sampler skips the sheared peg-body projections)", () => {
     const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: PEGS3 });
     const rise = 20 * Math.sin((5 * Math.PI) / 180) + 0.8;
+    // Peg x is mounted-view space; the geometry places each peg mirrored.
     const nearPeg = (x: number, y: number) =>
       PEGS3.some((peg) => {
         const footprint = peg.diameter / 2 + 2;
-        return Math.abs(x - peg.x) <= footprint + 0.8 && y - peg.z >= -(footprint + 0.8) && y - peg.z <= footprint + rise + 0.8;
+        const gx = COUPON.width - peg.x;
+        return Math.abs(x - gx) <= footprint + 0.8 && y - peg.z >= -(footprint + 0.8) && y - peg.z <= footprint + rise + 0.8;
       });
     const radius = 5;
     const insideRounded = (x: number, y: number) => {
@@ -315,33 +317,72 @@ describe("createMulticonnectPlateGeometry", () => {
 
   it("peg body, fillet, and tip are where the parameters say (raycasts through the 10mm peg)", () => {
     const positions = multiconnectPlatePositions({ ...COUPON, cornerRadius: 5, pegs: PEGS3 });
-    const peg = PEGS3[2]; // d=10 at (45, 35)
+    const peg = PEGS3[2]; // d=10 at viewed (45, 35) -> geometry x = 15
+    const gx = COUPON.width - peg.x;
     const tiltRad = (5 * Math.PI) / 180;
     const tipDepth = peg.length * Math.cos(tiltRad); // 19.92
 
     // Through the peg center: solid from inside the peg through the plate.
-    const center = depthCrossings(positions, peg.x, peg.z);
+    const center = depthCrossings(positions, gx, peg.z);
     expect(isSolidAt(center, -10)).toBe(true); // inside the peg body
     expect(isSolidAt(center, -tipDepth - 0.5)).toBe(false); // beyond the tip
     expect(isSolidAt(center, 1.2)).toBe(true); // front skin behind the root
 
     // Just outside the footprint: air in front of the face.
-    const beside = depthCrossings(positions, peg.x + peg.diameter / 2 + 2 + 1.5, peg.z);
+    const beside = depthCrossings(positions, gx + peg.diameter / 2 + 2 + 1.5, peg.z);
     expect(isSolidAt(beside, -0.5)).toBe(false);
     expect(isSolidAt(beside, 1.2)).toBe(true);
 
     // Fillet collar: at 1mm outside the peg wall the quarter-round surface
     // sits ~0.27mm in front of the face (45deg arc chord tolerance ~0.02).
-    const collar = depthCrossings(positions, peg.x + peg.diameter / 2 + 1, peg.z + 0.3);
+    const collar = depthCrossings(positions, gx + peg.diameter / 2 + 1, peg.z + 0.3);
     expect(isSolidAt(collar, -0.15)).toBe(true);
     expect(isSolidAt(collar, -0.45)).toBe(false);
 
     // Tilt: the tip ring's top edge rises by ~length*sin(tilt) above the
     // root circle's top edge; probe a point that is peg material only
     // because of the upward shear.
-    const risen = depthCrossings(positions, peg.x, peg.z + peg.diameter / 2 + 0.8);
+    const risen = depthCrossings(positions, gx, peg.z + peg.diameter / 2 + 0.8);
     expect(isSolidAt(risen, -tipDepth + 1)).toBe(true); // sheared body covers it near the tip
     expect(isSolidAt(risen, -0.5)).toBe(false); // but not at the root
+  });
+
+  // The mounted-view convention (see MulticonnectPeg): peg x counts from
+  // the plate's left edge AS THE MOUNTED VIEWER SEES IT, so the geometry
+  // places every peg at plateWidth - x. Regression for the physical-test
+  // finding that the v1 sampler read right-to-left on the wall.
+  it("peg viewed-x=10 on a 240mm plate lands at geometry x=230", () => {
+    const positions = multiconnectPlatePositions({ width: 240, height: 60, pegs: [{ diameter: 6, length: 20, x: 10, z: 30 }] });
+    // Exact: the tip-fan center vertex carries the geometry-space center x.
+    let hasTipCenterAt230 = false;
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      if (positions[i] === 230 && positions[i + 2] < -19) hasTipCenterAt230 = true;
+    }
+    expect(hasTipCenterAt230).toBe(true);
+    // Peg material in front of the face at geometry 230, none at geometry 10.
+    expect(isSolidAt(depthCrossings(positions, 230, 30), -5)).toBe(true);
+    expect(isSolidAt(depthCrossings(positions, 10, 30), -0.5)).toBe(false);
+  }, 20000);
+
+  it("asymmetric two-peg layout lands mirrored (each diameter at width - viewedX)", () => {
+    // d=6 at viewed 15 -> geometry 45; d=10 at viewed 40 -> geometry 20.
+    // Pre-fix, the same spec produced the x-mirror of this placement.
+    const positions = multiconnectPlatePositions({
+      ...COUPON,
+      pegs: [
+        { diameter: 6, length: 20, x: 15, z: 30 },
+        { diameter: 10, length: 20, x: 40, z: 30 },
+      ],
+    });
+    // Both pegs solid through their geometry-space centers.
+    expect(isSolidAt(depthCrossings(positions, 45, 30), -5)).toBe(true);
+    expect(isSolidAt(depthCrossings(positions, 20, 30), -5)).toBe(true);
+    // Diameter disambiguates the mirror: 4.2mm off-center at 1mm depth is
+    // inside the d=10 body (r=5) but outside the d=6 wall (r=3, fillet
+    // surface only ~0.4mm proud there). The pre-fix layout would invert
+    // these two expectations.
+    expect(isSolidAt(depthCrossings(positions, 20 + 4.2, 30), -1)).toBe(true);
+    expect(isSolidAt(depthCrossings(positions, 45 + 4.2, 30), -1)).toBe(false);
   });
 
   it("rejects invalid peg layouts", () => {
