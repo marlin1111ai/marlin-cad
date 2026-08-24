@@ -13,4 +13,7 @@ print-gated — a coupon or sampler STL from `test-prints/` (untracked) is
 actually printed and hand-verified before the next phase builds on it, and
 findings from those prints are banked as lessons.
 
+Session orientation: read reference/SESSION-STATE.md, OPEN-ITEMS.md,
+DECISIONS.md, KNOWN-FIXES.md.
+
 @CLAUDE-LESSONS.md
