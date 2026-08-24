@@ -1,0 +1,222 @@
+import { describe, expect, it } from "vitest";
+import {
+  createMulticonnectPlateGeometry,
+  multiconnectPlateDimensions,
+  multiconnectPlatePositions,
+  multiconnectSlotCenters,
+  normalizeMulticonnectSlotSpacing,
+  normalizeMulticonnectSlotTolerance,
+  MULTICONNECT_BACK_THICKNESS,
+  MULTICONNECT_BLIND_FLOOR_Z,
+  MULTICONNECT_SLOT_TOP_OFFSET,
+} from "@/lib/multiconnectContainerGeometry";
+import { analyzeTriangleSoup } from "@/lib/svgImport";
+
+// The Multiconnect slot is a BLIND cut -- the opposite acceptance from the
+// openConnect Container's perforation tests: there the raycast asserts the
+// cavity opens through the wall; here it must assert the front
+// (container-side) face stays solid everywhere while the channel is open
+// from the mounting face down to the blind floor.
+
+const COUPON = { width: 60, height: 60 };
+
+function depthCrossings(positions: readonly number[], x: number, y: number): number[] {
+  const crossings: number[] = [];
+  for (let i = 0; i + 8 < positions.length; i += 9) {
+    const p0 = [positions[i], positions[i + 1], positions[i + 2]];
+    const p1 = [positions[i + 3], positions[i + 4], positions[i + 5]];
+    const p2 = [positions[i + 6], positions[i + 7], positions[i + 8]];
+    const denom = (p1[1] - p2[1]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[1] - p2[1]);
+    if (Math.abs(denom) < 1e-12) continue;
+    const a = ((p1[1] - p2[1]) * (x - p2[0]) + (p2[0] - p1[0]) * (y - p2[1])) / denom;
+    const b = ((p2[1] - p0[1]) * (x - p2[0]) + (p0[0] - p2[0]) * (y - p2[1])) / denom;
+    const c = 1 - a - b;
+    if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
+    crossings.push(a * p0[2] + b * p1[2] + c * p2[2]);
+  }
+  crossings.sort((m, n) => m - n);
+  // A ray passing exactly through an edge shared by two triangles reports
+  // the crossing once per triangle; collapse those duplicates so parity
+  // counting stays correct. All crossings in these tests are transversal
+  // (no sample grazes a crease tangentially), and the plate has no feature
+  // thinner than ~0.4mm, so a 1e-6 merge cannot swallow a real pair.
+  return crossings.filter((value, index) => index === 0 || value - crossings[index - 1] > 1e-6);
+}
+
+function isSolidAt(crossings: number[], z: number): boolean {
+  let count = 0;
+  for (const crossing of crossings) if (crossing < z) count += 1;
+  return count % 2 === 1;
+}
+
+const CONFIGS = [
+  { label: "two-slot coupon 60x60", options: COUPON },
+  { label: "single-slot 28x40", options: { width: 28, height: 40 } },
+  { label: "quick release 60x60", options: { ...COUPON, slotQuickRelease: true } },
+  { label: "tolerance 0.925", options: { ...COUPON, slotTolerance: 0.925 } },
+  { label: "tolerance 1.075", options: { ...COUPON, slotTolerance: 1.075 } },
+] as const;
+
+describe("createMulticonnectPlateGeometry", () => {
+  it.each(CONFIGS)("$label: watertight manifold (0 boundary edges, 0 non-manifold edges)", ({ options }) => {
+    const positions = multiconnectPlatePositions(options);
+    expect(positions.every(Number.isFinite)).toBe(true);
+    const analysis = analyzeTriangleSoup(positions);
+    expect(analysis.boundaryEdges).toBe(0);
+    expect(analysis.nonManifoldEdges).toBe(0);
+  }, 20000);
+
+  // Stricter than the spatially-quantized check above: on the raw double
+  // coordinates, every directed edge must appear exactly once, with its
+  // reverse appearing exactly once. This only holds if every stitched seam
+  // (baked terminator <-> channel prism <-> cap notch boundaries) reuses
+  // bit-identical vertex coordinates AND all windings are consistent -- the
+  // exactness contract phase 1's clip-plane bake guarantee exists for.
+  it.each(CONFIGS)("$label: exact directed-edge manifold (bit-identical seams, consistent winding)", ({ options }) => {
+    const positions = multiconnectPlatePositions(options);
+    const directed = new Map<string, number>();
+    for (let i = 0; i + 8 < positions.length; i += 9) {
+      const keys = [0, 3, 6].map((offset) => `${positions[i + offset]},${positions[i + offset + 1]},${positions[i + offset + 2]}`);
+      for (let edge = 0; edge < 3; edge += 1) {
+        const key = `${keys[edge]}|${keys[(edge + 1) % 3]}`;
+        directed.set(key, (directed.get(key) ?? 0) + 1);
+      }
+    }
+    for (const [key, count] of directed) {
+      expect(count).toBe(1);
+      const [a, b] = key.split("|");
+      expect(directed.get(`${b}|${a}`)).toBe(1);
+    }
+  }, 20000);
+
+  it.each(CONFIGS)("$label: globally outward orientation (signed volume positive and consistent)", ({ options }) => {
+    const positions = multiconnectPlatePositions(options);
+    let signedVolume = 0;
+    for (let i = 0; i + 8 < positions.length; i += 9) {
+      const [ax, ay, az, bx, by, bz, cx, cy, cz] = positions.slice(i, i + 9);
+      signedVolume += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6;
+    }
+    expect(signedVolume).toBeGreaterThan(0);
+    // analyzeTriangleSoup reports absolute volume; matching the signed sum
+    // confirms no inward-facing patch cancels against the rest.
+    const analysis = analyzeTriangleSoup(positions);
+    expect(Math.abs(signedVolume - analysis.volume)).toBeLessThan(analysis.volume * 1e-9);
+  }, 20000);
+
+  it("bounding box is width x height x back thickness", () => {
+    const positions = multiconnectPlatePositions(COUPON);
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      for (let axis = 0; axis < 3; axis += 1) {
+        min[axis] = Math.min(min[axis], positions[i + axis]);
+        max[axis] = Math.max(max[axis], positions[i + axis]);
+      }
+    }
+    expect(min).toEqual([0, 0, 0]);
+    expect(max[0]).toBe(COUPON.width);
+    expect(max[1]).toBe(COUPON.height);
+    expect(max[2]).toBeCloseTo(MULTICONNECT_BACK_THICKNESS, 9);
+  });
+
+  it("slot centers follow the SCAD centering formula", () => {
+    const twoSlot = multiconnectSlotCenters(60, 28);
+    expect(twoSlot).toHaveLength(2);
+    expect(twoSlot[0]).toBeCloseTo(16, 9);
+    expect(twoSlot[1]).toBeCloseTo(44, 9);
+    expect(multiconnectSlotCenters(28, 28)).toEqual([14]);
+    const multiboard = multiconnectSlotCenters(100, 25);
+    expect(multiboard).toEqual([12.5, 37.5, 62.5, 87.5]);
+  });
+
+  it("normalization: SCAD floors and clamps", () => {
+    // Width floors at max(25, spacing) so at least one slot always fits;
+    // height floors at the SCAD's 25.
+    expect(multiconnectPlateDimensions({ width: 10, height: 10 })).toMatchObject({ width: 28, height: 25 });
+    expect(multiconnectPlateDimensions({ width: 10, height: 10, slotSpacing: 25 })).toMatchObject({ width: 25, height: 25 });
+    expect(normalizeMulticonnectSlotSpacing(1)).toBe(24);
+    expect(normalizeMulticonnectSlotTolerance(2)).toBe(1.075);
+    expect(normalizeMulticonnectSlotTolerance(0.5)).toBe(0.925);
+    expect(normalizeMulticonnectSlotTolerance(undefined)).toBe(1);
+  });
+
+  it("blind guarantee: solid material everywhere between the front face and the blind floor plane", () => {
+    const positions = multiconnectPlatePositions(COUPON);
+    // Full-footprint sweep (0.5mm inside the outer boundary to avoid
+    // grazing hits on the plate's own side faces).
+    for (let x = 1; x < COUPON.width; x += 2.9) {
+      for (let y = 1; y < COUPON.height; y += 2.9) {
+        const crossings = depthCrossings(positions, x, y);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+        expect(isSolidAt(crossings, MULTICONNECT_BLIND_FLOOR_Z - 0.15)).toBe(true);
+      }
+    }
+  }, 20000);
+
+  it("channel is open from the mounting face through to the blind floor (and no deeper)", () => {
+    const positions = multiconnectPlatePositions(COUPON);
+    const topCenterY = COUPON.height - MULTICONNECT_SLOT_TOP_OFFSET;
+    for (const cx of multiconnectSlotCenters(COUPON.width, 28)) {
+      const samples: [number, number][] = [];
+      // Neck strip along the slide (staying 1.15mm inside the 7.65mm neck
+      // half-width, and below the clip plane).
+      for (let dx = -6.5; dx <= 6.5; dx += 1.625) {
+        for (let y = 2; y <= topCenterY - 2.5; y += 4.3) samples.push([cx + dx, y]);
+      }
+      // Round-top region (inside the 7.65 semicircle, outside the 1.5mm
+      // dimple's plan radius).
+      samples.push([cx + 4, topCenterY], [cx - 4, topCenterY], [cx, topCenterY + 4], [cx + 3, topCenterY + 3]);
+      for (const [x, y] of samples) {
+        const crossings = depthCrossings(positions, x, y);
+        // Nothing between just past the blind floor and just short of the
+        // mounting face: the slot void runs clear through that band.
+        expect(crossings.filter((z) => z > MULTICONNECT_BLIND_FLOOR_Z + 1e-3 && z < MULTICONNECT_BACK_THICKNESS - 1e-3)).toEqual([]);
+        // ...but the blind floor itself is present, and the front skin is
+        // solid beneath it.
+        expect(crossings.some((z) => Math.abs(z - MULTICONNECT_BLIND_FLOOR_Z) < 1e-6)).toBe(true);
+        expect(isSolidAt(crossings, 1.2)).toBe(true);
+        expect(isSolidAt(crossings, 4)).toBe(false);
+      }
+    }
+  }, 20000);
+
+  it("keyhole profile: head recess is wider than the neck (void behind the mounting face at head radius)", () => {
+    const positions = multiconnectPlatePositions(COUPON);
+    // At 9mm across from the slot center -- outside the 7.65 neck, inside
+    // the 10.15 head -- the void spans the head recess only, with solid
+    // material between it and the mounting face.
+    const crossings = depthCrossings(positions, 16 + 9, 5);
+    expect(isSolidAt(crossings, 1.2)).toBe(true); // front skin
+    expect(isSolidAt(crossings, 3)).toBe(false); // head recess void
+    expect(isSolidAt(crossings, 5.5)).toBe(true); // solid behind the recess
+  });
+
+  it("lock dimple: bump on the blind floor by default, absent with slotQuickRelease", () => {
+    const withDimple = multiconnectPlatePositions(COUPON);
+    const quickRelease = multiconnectPlatePositions({ ...COUPON, slotQuickRelease: true });
+    const topCenterY = COUPON.height - MULTICONNECT_SLOT_TOP_OFFSET;
+    // 0.707mm plan radius off the round-top center: the 45-degree bump
+    // surface sits ~0.79mm above the blind floor there.
+    const [x, y] = [16 + 0.5, topCenterY + 0.5];
+    const bumped = depthCrossings(withDimple, x, y);
+    expect(isSolidAt(bumped, MULTICONNECT_BLIND_FLOOR_Z + 0.7)).toBe(true);
+    expect(isSolidAt(bumped, MULTICONNECT_BLIND_FLOOR_Z + 0.9)).toBe(false);
+    const flat = depthCrossings(quickRelease, x, y);
+    expect(isSolidAt(flat, MULTICONNECT_BLIND_FLOOR_Z + 0.1)).toBe(false);
+    expect(isSolidAt(flat, MULTICONNECT_BLIND_FLOOR_Z - 0.1)).toBe(true);
+  });
+
+  it("between and beside slots the plate is solid through its full thickness", () => {
+    const positions = multiconnectPlatePositions(COUPON);
+    for (const [x, y] of [[30, 5], [30, 30], [30, 47], [2, 30], [58, 30]] as const) {
+      const crossings = depthCrossings(positions, x, y);
+      for (const z of [0.5, 3.25, 6.2]) expect(isSolidAt(crossings, z)).toBe(true);
+    }
+  });
+
+  it("createMulticonnectPlateGeometry returns a renderable BufferGeometry", () => {
+    const geometry = createMulticonnectPlateGeometry(COUPON);
+    expect(geometry.getAttribute("position").count).toBeGreaterThan(0);
+    expect(geometry.getAttribute("normal")).toBeDefined();
+  });
+});
