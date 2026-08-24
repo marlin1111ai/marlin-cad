@@ -9288,7 +9288,10 @@ function SketchReferenceIcon({ name }: { name: SketchReferenceIconName }) {
 }
 
 const basicShapeGroups = toolbarShapeAssetGroups.filter((group) => group.category === "Basic Shapes");
-const openGridShapeGroups = toolbarShapeAssetGroups.filter((group) => group.category === "OpenGrid");
+// The OpenGrid menu shows the OpenGrid primitives plus every parts-library
+// group (e.g. the Multiconnect presets' "Wrench Racks") as its own labeled
+// section -- new preset families appear here without touching this file.
+const openGridShapeGroups = toolbarShapeAssetGroups.filter((group) => group.category !== "Basic Shapes");
 
 function ShapeMenuButton({
   label,

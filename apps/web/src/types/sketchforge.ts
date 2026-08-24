@@ -30,6 +30,11 @@ export type ShapeAsset = {
   kind: ShapeKind;
   color: string;
   hole?: boolean;
+  // Set on built-in parts-library entries: makeShapeFromAsset pre-fills the
+  // inserted shape from the named preset (multiconnectPresets.ts). The
+  // result is a normal parametric shape -- fully editable, nothing special
+  // about it after insertion.
+  presetId?: string;
 };
 
 export type ProjectAssetSourceFormat = "stl" | "obj" | "svg" | "step";

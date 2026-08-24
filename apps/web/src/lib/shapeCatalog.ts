@@ -25,6 +25,7 @@ import {
   multiconnectPlatePositions,
   type MulticonnectPlateOptions,
 } from "@/lib/multiconnectContainerGeometry";
+import { MULTICONNECT_PRESETS, multiconnectPresetById } from "@/lib/multiconnectPresets";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
 
@@ -64,6 +65,20 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // (multiconnectShapeType) switched via the inspector panel, one catalog
   // entry, matching the container/board/snap pattern above.
   { id: "multiconnect-container", name: "Multiconnect Container", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "multiconnectContainer", color: "#9b3bd2", category: OPENGRID_CATEGORY },
+  // Built-in parts library (multiconnectPresets.ts): each preset is a normal
+  // multiconnectContainer entry whose presetId makes makeShapeFromAsset
+  // pre-fill the inserted shape. Presets group under their own labeled
+  // section (preset.group) in the OpenGrid insert menu.
+  ...MULTICONNECT_PRESETS.map((preset): ToolbarShapeAsset => ({
+    id: preset.id,
+    name: preset.name,
+    src: "assets/sketchforge/shape-icons-gray/box.png",
+    menuIcon: "assets/sketchforge/shape-icons-gray/box.png",
+    kind: "multiconnectContainer",
+    color: "#9b3bd2",
+    category: preset.group,
+    presetId: preset.id,
+  })),
 ];
 
 // Insert defaults for the Multiconnect Container: a 112x60 Plate (4 slots at
@@ -233,7 +248,7 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : asset.kind === "text" ? 86 : size;
   const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : asset.kind === "text" ? 28 : size;
 
-  return {
+  const shape: WorkplaneShape = {
     id: createLocalId(asset.id),
     name: asset.name,
     kind: asset.kind,
@@ -297,4 +312,9 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     locked: false,
     hidden: false,
   };
+  // Parts-library entries: overlay the preset's fully-specified parameters
+  // on the blank insert. The result is an ordinary shape -- every field
+  // remains editable in the inspector afterward.
+  const preset = asset.presetId ? multiconnectPresetById(asset.presetId) : undefined;
+  return preset ? { ...shape, ...preset.shape } : shape;
 }
