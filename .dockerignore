@@ -16,3 +16,10 @@ tests
 docs
 *.log
 *.tsbuildinfo
+test-prints
+reference
+.env
+.env*.local
+.DS_Store
+.vscode
+.idea
