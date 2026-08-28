@@ -19,6 +19,19 @@ Where things stand right now.
 - reference/ session-orientation docs (SESSION-STATE, OPEN-ITEMS, DECISIONS, KNOWN-FIXES) added (`640ebe3`).
 - Docker deployment consolidated on `deploy/docker/Dockerfile`; root Dockerfile removed (`edb8101`).
 
+## Dev environment
+
+- Fresh Pop!_OS 24.04 install. User `marlinai`, host `pop-os`, `192.168.1.245`.
+- The repo lives at `/Apps/marlin-cad` — `/Apps` is a separate drive, not the
+  home folder. See DECISIONS.md for why.
+- Node 22.23.2 LTS via nvm, not apt. npm 10.9.8.
+- Claude Code 2.1.251, native installer, at `~/.local/bin`.
+- Rebuild verified end to end on this box: clone, `npm install`,
+  `npm run dev` on port 3000, Wrench Rack Metric 2 preset loads and renders,
+  STL export confirmed working.
+- **Docker is not installed here.** The `docker:*` npm scripts do not run on
+  this box; Unraid pulls the production image from GHCR instead.
+
 ## Production deployment
 
 - marlin-cad runs as a Docker container on Unraid, pulled from

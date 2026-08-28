@@ -16,3 +16,5 @@ Design decisions and the reason for each.
 - **Production images publish to GHCR; Unraid pulls from there.** Matches the pattern already used by the other Marlin apps, and keeps the NAS out of the build business.
 - **Unraid pins a version tag (`1.0.0`), never `:latest`.** Production moves only when the tag is changed deliberately; Unraid's update check cannot pull a new build out from under a working deployment.
 - **The GHCR package is public.** The image contains only the open-source app and its built-in presets, so there is nothing to gate — and public means Unraid does not need to hold GHCR credentials to pull.
+- **marlin-cad is Linux-only.** Developed on Pop!_OS, deployed as a Linux container on Unraid. The Mac is browser and slicer only. Cross-platform moves (Mac/Windows/Linux) caused persistent problems on other projects; this one never left Linux and never had them.
+- **Projects live on the `/Apps` drive, not in the home folder.** Runtimes (Node via nvm) and tooling stay in the home folder; project files and `node_modules` stay under `/Apps/<project>`.
