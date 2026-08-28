@@ -12,3 +12,7 @@ Design decisions and the reason for each.
 - **Shelf variant intentionally has no truss/gusset.**
 - **MIN_OPENCONNECT_DIMENSION lowered to 0.1** (`97a97a3`).
 - **Deployment to Unraid is a separate, human-gated step.** Dev runs as a local process on port 3000.
+- **`deploy/docker/Dockerfile` is canonical; the root Dockerfile was removed.** Every build path already targeted it — `npm run docker:build`, `deploy/docker/compose.yaml`, and `.github/workflows/docker.yml` all pass `file: deploy/docker/Dockerfile` with the repo root as context — so a second root Dockerfile was pure drift risk (`edb8101`). The root `.dockerignore` went with it: BuildKit reads the ignore file sitting next to the Dockerfile, so `deploy/docker/Dockerfile.dockerignore` is what applies and the root file never did.
+- **Production images publish to GHCR; Unraid pulls from there.** Matches the pattern already used by the other Marlin apps, and keeps the NAS out of the build business.
+- **Unraid pins a version tag (`1.0.0`), never `:latest`.** Production moves only when the tag is changed deliberately; Unraid's update check cannot pull a new build out from under a working deployment.
+- **The GHCR package is public.** The image contains only the open-source app and its built-in presets, so there is nothing to gate — and public means Unraid does not need to hold GHCR credentials to pull.
