@@ -1,7 +1,7 @@
 // One-off generator for test-prints/socket-tray-sampler.stl -- the Socket
-// Tray sampler coupon (5 round blind pockets at stepped diameters). See
-// reference/socket-tray-sampler-report.md for why these specific numbers
-// were chosen. Run with:
+// Tray sampler coupon (6 round blind pockets at real measured diameters).
+// See reference/socket-tray-sampler-report.md for why these specific
+// numbers were chosen. Run with:
 //
 //   node --experimental-strip-types scripts/generate-socket-tray-sampler.mjs
 //
@@ -22,18 +22,30 @@ import { socketTrayPositions } from "../apps/web/src/lib/socketTrayGeometry.ts";
 
 const OUT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "socket-tray-sampler.stl");
 
-// Same 5 pockets as SAMPLER_POCKETS in tests/unit/socketTrayGeometry.test.ts
+// Same 6 pockets as SAMPLER_POCKETS in tests/unit/socketTrayGeometry.test.ts
 // -- keep both in sync if these numbers change. Pocket depth 14mm + 4mm
 // floor = 18mm tray thickness (unchanged this pass -- see
-// reference/socket-tray-sampler-report.md). Diameters shifted from
-// 15/18/22/25/28mm to 10/14/18/22/27mm this pass; centers (x, z) are
-// unchanged -- only the diameter list moved.
+// reference/socket-tray-sampler-report.md).
+//
+// Diameters are real measured socket ODs + 2mm clearance (not estimates),
+// covering all 12 standard sockets 5-16mm via the sockets-per-pocket
+// mapping in the report -- 14, 15, 19, 20.70, 23, 25mm, left to right.
+//
+// Going from 5 to 6 pockets at the previous 45mm pitch/30mm-margin layout
+// would have needed a 285mm-wide tray (30 + 5*45 + 30), 29mm over the
+// Bambu X1C's 256mm bed with zero spare margin. Pitch reduced to 36mm
+// (margins unchanged at 30mm each side) instead: width = 30 + 5*36 + 30 =
+// 240mm exactly, 16mm of spare under the 256mm bed. Every adjacent-pocket
+// gap at 36mm pitch still clears the module's 4mm SOCKET_TRAY_POCKET_GAP
+// minimum by a wide margin -- the tightest pair (23mm/25mm, the two
+// largest) still has a 12mm gap.
 const POCKETS = [
-  { diameter: 10, depth: 14, x: 30, z: 30 },
-  { diameter: 14, depth: 14, x: 75, z: 30 },
-  { diameter: 18, depth: 14, x: 120, z: 30 },
-  { diameter: 22, depth: 14, x: 165, z: 30 },
-  { diameter: 27, depth: 14, x: 210, z: 30 },
+  { diameter: 14, depth: 14, x: 30, z: 30 },
+  { diameter: 15, depth: 14, x: 66, z: 30 },
+  { diameter: 19, depth: 14, x: 102, z: 30 },
+  { diameter: 20.7, depth: 14, x: 138, z: 30 },
+  { diameter: 23, depth: 14, x: 174, z: 30 },
+  { diameter: 25, depth: 14, x: 210, z: 30 },
 ];
 
 const positions = socketTrayPositions({ width: 240, depth: 60, thickness: 18, pockets: POCKETS });
