@@ -30,6 +30,11 @@ coupon — every figure below reflects the current state, not any
 superseded version. `test-prints/socket-tray-sampler.stl` was overwritten
 again; the 5-pocket, 10-27mm STL no longer exists on disk.
 
+**2026-08-30 UPDATE 4 (documentation only, no code/geometry/STL change):**
+replaced the flagged "unconfirmed guess" sockets-per-pocket mapping with
+the owner's real measured mapping, supplied by the foreman. See
+"Sockets-per-pocket mapping (5-16mm) — CONFIRMED" below.
+
 ## What was built
 
 - `apps/web/src/lib/socketTrayGeometry.ts` — new sibling primitive module
@@ -115,34 +120,40 @@ therefore testing both the diameter estimates *and* whether 2mm of radial
 clearance is the right amount, not testing bare OD-for-OD fit the way the
 15-28mm and 10-27mm coupons did.
 
-### Sockets-per-pocket mapping (5-16mm)
+### Sockets-per-pocket mapping (5-16mm) — CONFIRMED
 
-The brief states these 6 diameters cover all 12 standard sockets from 5mm
-to 16mm, with multiple sockets sharing a pocket. **I was given the 6 final
-diameters, not the owner's underlying per-socket OD measurements**, so I
-cannot responsibly state which of the 12 nominal sizes maps to which
-pocket as verified fact — that correspondence lives in data I don't have.
-What I *can* derive without guessing is the maximum OD each pocket
-accommodates, by reversing the stated "OD + 2mm" formula:
+**Update, same day:** the table below is the real measured mapping,
+sourced from the owner's own caliper measurements (relayed by the
+foreman) — not derived, not inferred, not the OD+2mm-formula guess this
+section originally carried. It supersedes that guess entirely:
 
-| Pocket | Diameter | Max accommodated OD (diameter − 2mm) |
-|---|---|---|
-| 1 | 14mm | 12mm |
-| 2 | 15mm | 13mm |
-| 3 | 19mm | 17mm |
-| 4 | 20.70mm | 18.70mm |
-| 5 | 23mm | 21mm |
-| 6 | 25mm | 23mm |
+| Pocket diameter | Socket size(s) it fits |
+|---|---|
+| 14mm | 5mm, 6mm |
+| 15mm | 7mm, 8mm, 9mm |
+| 19mm | 10mm, 11mm, 12mm |
+| 20.70mm | 13mm |
+| 23mm | 14mm |
+| 25mm | 15mm, 16mm |
 
-The simplest inference consistent with "12 sockets, 6 pockets, ascending
-order" is 2 consecutive nominal sizes per pocket (5&6→pocket 1, 7&8→pocket
-2, 9&10→pocket 3, 11&12→pocket 4, 13&14→pocket 5, 15&16→pocket 6) — **but
-this is my inference, not confirmed data**, and the uneven spacing between
-pockets (a 4mm jump from pocket 1 to pocket 2, versus 1-2mm jumps
-elsewhere) suggests the real grouping likely isn't a uniform 2-per-pocket
-split. Flagged as an open question below rather than presented as settled
-— the owner's own measurement notes are the source of truth here, not
-anything I can reconstruct from 6 final numbers.
+That's 2 + 3 + 3 + 1 + 1 + 2 = 12 sockets across 6 pockets, confirming the
+"all 12 standard sockets 5-16mm" coverage the brief described. For the
+record, the grouping is NOT the uniform "2 consecutive sizes per pocket"
+pattern this report originally guessed at (which would have paired
+13mm+14mm into one pocket and 15mm+16mm into another) — the real split is
+uneven (2/3/3/1/1/2), which is exactly why that earlier guess was flagged
+as unconfirmed rather than presented as fact. The max-accommodated-OD
+figures below (from reversing the stated "OD + 2mm" formula) are still
+useful context alongside the confirmed sizes:
+
+| Pocket | Diameter | Sockets it fits | Max accommodated OD (diameter − 2mm) |
+|---|---|---|---|
+| 1 | 14mm | 5mm, 6mm | 12mm |
+| 2 | 15mm | 7mm, 8mm, 9mm | 13mm |
+| 3 | 19mm | 10mm, 11mm, 12mm | 17mm |
+| 4 | 20.70mm | 13mm | 18.70mm |
+| 5 | 23mm | 14mm | 21mm |
+| 6 | 25mm | 15mm, 16mm | 23mm |
 
 ### Bed-fit
 
@@ -282,6 +293,17 @@ dedicated tightest-gap check and the renamed/retargeted smallest-pocket
 check), the full suite is green at 319/319, and
 `npx tsc -p apps/web/tsconfig.json --noEmit` is clean.
 
+### 2026-08-30 UPDATE 4 pass (documentation only — confirmed sockets-per-pocket table)
+
+| File | Action | Task step |
+|---|---|---|
+| `reference/socket-tray-sampler-report.md` | edited — replaced the flagged "unconfirmed guess" mapping in "Sockets-per-pocket mapping" with the foreman-supplied confirmed table; resolved (struck through) the corresponding Open Questions entry; updated the Closing Summary's mention of the guess; added this pass's banner note and SCOPE CHECK entry | 1 |
+
+No other file was touched this pass — no code, geometry, generator script,
+test, or STL change, per the brief's explicit "documentation only" scope.
+Confirmed via `git status` immediately before committing (see below):
+`reference/socket-tray-sampler-report.md` is the only modified file.
+
 ## Verification at the smaller diameter
 
 The brief singled out the 10mm pocket as the one most likely to expose a
@@ -309,19 +331,14 @@ just physically smaller — and the observed results bore that out.
   depth suggests (a 14mm socket and a 25mm socket are not usually the same
   height). Worth explicitly measuring a few real sockets' heights before
   the next revision.
-- **The sockets-per-pocket mapping is inferred, not confirmed.** This
-  report's "Sockets-per-pocket mapping" table above reconstructs each
-  pocket's max-accommodated-OD from the stated "OD + 2mm" formula (that
-  part is real arithmetic), but the actual correspondence between the 12
-  nominal socket sizes (5-16mm) and the 6 pockets was not included in this
-  brief — only the 6 final diameters were. I was NOT given the owner's raw
-  per-socket measurements, so I did not fabricate a specific size-to-pocket
-  table; a naive "2 consecutive sizes per pocket" grouping was floated as
-  the simplest guess but flagged as unconfirmed, since the uneven spacing
-  between pocket diameters (a 4mm jump from pocket 1→2, versus 1-2mm
-  jumps elsewhere) suggests the real grouping isn't uniform. If a specific
-  mapping matters for the print evaluation, the owner's own measurement
-  notes are the source of truth, not this report.
+- ~~The sockets-per-pocket mapping is inferred, not confirmed.~~
+  **Resolved, same day:** the foreman supplied the owner's real measured
+  mapping (see "Sockets-per-pocket mapping (5-16mm) — CONFIRMED" above).
+  For the record, the earlier guess in this report was wrong in its
+  specifics — it assumed a uniform 2-sizes-per-pocket split, but the
+  confirmed real grouping is uneven (2/3/3/1/1/2) — exactly the outcome
+  that guess was flagged as at risk of, which is why it was presented as
+  an unconfirmed inference rather than fact in the first place.
 - **The 2mm radial clearance is itself now something this coupon is
   testing, not something assumed absent.** Every prior revision explicitly
   added zero clearance (testing bare-OD fit); this revision's diameters
@@ -364,10 +381,12 @@ looked risky in the build: every pocket-to-pocket gap is still at least
 neighboring pockets at 23mm and 25mm, still has 12mm of material between
 them — confirmed by a dedicated test, not just arithmetic), and the
 20.70mm value flowed through the geometry, tests, and STL export exactly
-like any other number — nothing in the pipeline rounds or truncates. The
-one thing I couldn't responsibly deliver as fact: which of your 12
-measured socket sizes (5-16mm) goes in which pocket. You gave me the 6
-final diameters, not the underlying per-socket measurements, so I
-included the math I *can* derive (max OD each pocket fits) and flagged
-the sizes-to-pockets grouping as my best guess, not confirmed data —
-see "Sockets-per-pocket mapping" and Open Questions above.
+like any other number — nothing in the pipeline rounds or truncates.
+
+**Same-day update:** the sockets-per-pocket mapping is now confirmed with
+your real measured data (14mm→5,6mm; 15mm→7,8,9mm; 19mm→10,11,12mm;
+20.70mm→13mm; 23mm→14mm; 25mm→15,16mm), replacing the earlier flagged
+guess in this report. Worth noting for your own tracking: the real
+grouping isn't the even 2-per-pocket split that guess assumed — it's
+uneven (2/3/3/1/1/2) — which is exactly why it was reported as an
+unconfirmed inference rather than presented as settled at the time.
