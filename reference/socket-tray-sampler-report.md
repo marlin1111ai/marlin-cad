@@ -5,13 +5,20 @@ file location settled in `reference/socket-tray-recon.md` (read first, not
 re-derived here). New primitive module + a printable coupon generated from
 it, committed locally only (no push yet, per the GIT gate in the brief).
 
-**2026-08-30 UPDATE: pocket depth reduced from 20mm to 14mm, tray thickness
+**2026-08-30 UPDATE 1: pocket depth reduced from 20mm to 14mm, tray thickness
 from 24mm to 18mm** (floor thickness unchanged at 4mm; width/depth/pocket
-diameters unchanged). This entire document has been updated in place to
-describe the current 14mm/18mm coupon — every figure below reflects the
-current state, not the superseded 20mm/24mm one. `test-prints/socket-tray-sampler.stl`
+diameters unchanged at that point). `test-prints/socket-tray-sampler.stl`
 was overwritten (not versioned separately); the 20mm/24mm STL no longer
 exists on disk.
+
+**2026-08-30 UPDATE 2: pocket diameters shifted from 15/18/22/25/28mm to
+10/14/18/22/27mm** (depth 14mm, floor 4mm, tray 240 x 60 x 18mm all
+unchanged from Update 1 — only the diameter list moved, pocket centers are
+unchanged). This entire document has been updated in place to describe the
+current 10-27mm/14mm-deep/18mm-thick coupon — every figure below reflects
+the current state, not either superseded version.
+`test-prints/socket-tray-sampler.stl` was overwritten again; the 15-28mm
+STL no longer exists on disk.
 
 ## What was built
 
@@ -53,45 +60,59 @@ exists on disk.
 | Parameter | Value | Reasoning |
 |---|---|---|
 | Tray width (X, left-right) | **240mm** | Hard constraint from the brief — matches the wrench rack plates' footprint (`multiconnectPresets.ts` positions its pegs from x=20 to x=220, implying a 240mm plate width). |
-| Tray depth (Z, front-back) | **60mm** | Needs to comfortably hold a single row of round pockets up to 28mm OD with real edge margin on both sides. At the chosen layout (all pocket centers at z=30, i.e. centered), the largest (28mm) pocket's rim sits 16mm from the front and back edges — well past the 5mm minimum edge clearance the module enforces, leaving real structural wall there. 60mm is not the minimum possible; it's chosen so the coupon isn't fighting its own edge-clearance rule and is comfortable to handle and print. |
+| Tray depth (Z, front-back) | **60mm** | Sized for the original 15-28mm OD range with real edge margin on both sides; unchanged this pass. Now that the diameter range has shifted down to 10-27mm (see below), the largest pocket's rim sits 16.5mm from the front/back edges — if anything more comfortable than the 16mm it had at 28mm OD, still well past the 5mm minimum edge clearance the module enforces. 60mm was never the minimum possible depth; it stays a comfortable choice rather than a tight one. |
 | Tray thickness (Y, up) | **18mm** | = pocket depth (14mm) + floor thickness (4mm). Not derived independently — see pocket depth and floor thickness below. Reduced from the first coupon's 24mm (20mm depth + 4mm floor) at the owner's request; floor thickness itself is unchanged. |
 | Pocket depth (all 5, single value per the brief) | **14mm** | Reduced from the first coupon's 20mm estimate. Still an estimate for a 3/8"-drive standard (non-deep) socket's height, now toward the shallower end of the roughly 12-25mm range these sockets run across common metric/SAE sizes, rather than the middle. **Still the least-derived number in the whole coupon** — not checked against any real socket. Flagged again in Open Questions below. |
 | Floor thickness (material kept under each pocket) | **4mm** | Comfortably above the 2mm `MIN_SOCKET_TRAY_FLOOR_THICKNESS` the module enforces (chosen per `CLAUDE-LESSONS.md`'s slicer-slit-fusion lesson: don't let a floor go arbitrarily thin just because the geometry permits it) — 4mm prints as several solid layers and should handle a socket being set down into the pocket without flexing. |
 
 ## The 5 pocket diameters and positions
 
-Evenly spaced (arithmetic-ish, step ~3-4mm) across the foreman's estimated
-15-28mm OD range, left to right in ascending size, center-to-center pitch
-45mm, centers at z=30 (tray depth centerline):
+**Diameters shifted this pass from 15/18/22/25/28mm to 10/14/18/22/27mm.**
+Pocket centers are unchanged (same center-to-center pitch 45mm, centers at
+z=30, the tray depth centerline) — only the diameter list moved, so every
+pocket's footprint shrank in place rather than the layout being
+re-derived:
 
 | # (left→right) | Diameter (OD) | Depth | Center (x, z) | Edge/neighbor clearance |
 |---|---|---|---|---|
-| 1 | **15mm** | 14mm | (30, 30) | 22.5mm to left edge |
-| 2 | **18mm** | 14mm | (75, 30) | 28.4mm gap to pocket 1 |
-| 3 | **22mm** | 14mm | (120, 30) | 25.9mm gap to pocket 2 |
-| 4 | **25mm** | 14mm | (165, 30) | 21.6mm gap to pocket 3 |
-| 5 | **28mm** | 14mm | (210, 30) | 18.6mm gap to pocket 4; 16mm to right edge |
+| 1 | **10mm** | 14mm | (30, 30) | 25mm to left edge; 25mm to front/back edge |
+| 2 | **14mm** | 14mm | (75, 30) | 33mm gap to pocket 1; 23mm to front/back edge |
+| 3 | **18mm** | 14mm | (120, 30) | 29mm gap to pocket 2; 21mm to front/back edge |
+| 4 | **22mm** | 14mm | (165, 30) | 25mm gap to pocket 3; 19mm to front/back edge |
+| 5 | **27mm** | 14mm | (210, 30) | 20.5mm gap to pocket 4; 16.5mm to right edge; 16.5mm to front/back edge |
 
-Diameters, positions, and edge/neighbor clearances are unchanged from the
-first coupon — this update only reduced pocket depth (and therefore tray
-thickness); the plan-view layout is identical.
-
-All diameters and the depth are round-number **estimates**, per the brief's
-own note — not measurements against real sockets. No radial clearance/
-tolerance was added on top of the stated diameters: since the whole point
-of this coupon is to compare it against real sockets and report back what
-fits, adding an unstated fudge factor now would only make that comparison
+Every clearance figure above is now larger than the equivalent figure was
+at 15-28mm OD (e.g. pocket 1's edge clearance grew from 22.5mm to 25mm,
+the smallest adjacent gap grew from 18.6mm to 20.5mm) — smaller sockets
+at the same fixed centers simply leave more surrounding material, well
+clear of the module's 5mm edge / 4mm gap minimums either way. All
+diameters and the depth remain round-number **estimates** — not
+measurements against real sockets. No radial clearance/tolerance was
+added on top of the stated diameters: since the whole point of this
+coupon is to compare it against real sockets and report back what fits,
+adding an unstated fudge factor now would only make that comparison
 harder to interpret. The next pass should size pockets off the owner's
 actual caliper measurements plus a deliberate, stated clearance, informed
 by this coupon's print.
 
 ## STL export
 
-- File: `test-prints/socket-tray-sampler.stl` (overwritten in place; supersedes the 20mm-depth/24mm-thickness version)
+- File: `test-prints/socket-tray-sampler.stl` (overwritten in place; supersedes the 15-28mm-diameter version)
 - Format: ASCII STL, `solid socket_tray_sampler` / `endsolid socket_tray_sampler`
-- File size: 292,047 bytes
-- Triangle count: **1,292** (unchanged from the first coupon — same topology, only the Y coordinate of the pocket floors and every face above them shifted; confirmed by counting `facet normal` lines and cross-checked against 3,876 `vertex` lines = 1,292 × 3)
-- Bounding box, read back from the regenerated file's own vertex coordinates (not assumed from the script's inputs): X 0→240mm, Y −60→0mm, Z 0→**18mm** — i.e. exactly 240 × 60 × 18mm once the STL's Z-up axes are mapped back through `sketchForgeToZUp` to the tray's own (width, depth, thickness). Confirms the export matches the new intended dimensions, not just the in-memory geometry.
+- File size: 291,761 bytes
+- Triangle count: **1,292** (unchanged from the prior coupon — same topology, only radii changed; confirmed by counting `facet normal` lines and cross-checked against 3,876 `vertex` lines = 1,292 × 3)
+- Bounding box, read back from the regenerated file's own vertex coordinates (not assumed from the script's inputs): scene-space (after mapping the STL's Z-up axes back through the inverse of `sketchForgeToZUp`) X 0→**240mm**, Y (thickness) 0→**18mm**, Z (depth) 0→**60mm** — i.e. exactly 240 × 60 × 18mm, unchanged from Update 1, confirming this pass touched only the pockets.
+- **Per-pocket diameter, verified directly against the regenerated file** (not just assumed from the generator script's inputs): each pocket's floor-ring vertices — all lying exactly on the tray's Y=4mm (floor) plane by construction — were clustered by nearest known pocket center and their distance from that center measured. Every floor ring is a perfect circle (378 vertices each, consistent with `SOCKET_TRAY_POCKET_SEGMENTS = 64` segments × 6 triangles' worth of index reuse) at exactly the expected radius, min and max radius identical to 4 decimal places:
+
+  | Center (x, z) | Expected diameter | Measured diameter (min↔max) |
+  |---|---|---|
+  | (30, 30) | 10mm | 10.0000mm |
+  | (75, 30) | 14mm | 14.0000mm |
+  | (120, 30) | 18mm | 18.0000mm |
+  | (165, 30) | 22mm | 22.0000mm |
+  | (210, 30) | 27mm | 27.0000mm |
+
+  All 5 diameters landed in the exported file exactly as specified.
 
 ## SCOPE CHECK
 
@@ -140,16 +161,63 @@ or per-pocket raycast checks — all 14 tests in
 `tests/unit/socketTrayGeometry.test.ts` still pass, and the full suite is
 green at 316/316.
 
+### 2026-08-30 UPDATE 2 pass (diameters 10/14/18/22/27mm)
+
+| File | Action | Task step |
+|---|---|---|
+| `scripts/generate-socket-tray-sampler.mjs` | edited — `POCKETS` array diameters 15/18/22/25/28 → 10/14/18/22/27; centers (x, z) and depths untouched | 1, 2 |
+| `tests/unit/socketTrayGeometry.test.ts` | edited — `SAMPLER_POCKETS` diameters updated to match; renamed the "largest pocket" test's title from 28mm to 27mm; added a new explicit off-center raycast test for the smallest (10mm) pocket, mirroring the existing largest-pocket test, per the brief's specific concern about a minimum-size edge case | 3 |
+| `test-prints/socket-tray-sampler.stl` | overwritten via the regenerated script, superseding the 15-28mm file | 2 |
+| `reference/socket-tray-sampler-report.md` | edited throughout (this document) | 4 |
+| `apps/web/src/lib/socketTrayGeometry.ts` | **not touched this pass** — diameters are always caller-supplied per pocket (`SocketTrayPocket.diameter`), there is no in-module diameter default or constant to update, unlike the thickness default touched in Update 1 | — |
+| `test-prints/README.md` | edited — diameter list in the "Unvalidated samplers" entry updated from 15/18/22/25/28mm to 10/14/18/22/27mm (it had been left un-edited in the prior depth-only pass since it didn't mention depth/thickness figures at all, but it does list diameters, so this pass required the edit that pass didn't) | not explicitly listed in this brief's deliverables, but required to avoid leaving stale diameters as the described current state |
+| `multiconnectContainerGeometry.ts` | not touched | do-not-touch |
+| `test-prints/[Metric\|SAE]*.stl` (6 files) | not touched, not opened | do-not-touch |
+| `openGridSnapGeometry.ts` / `openGridSnapMesh.ts` | not touched | do-not-touch |
+| `deploy/docker/*`, Unraid/GHCR files | not touched | do-not-touch |
+
+No STOP-AND-REPORT condition was hit this pass: the 10mm pocket (the
+smallest this module has been exercised against, versus 15mm previously)
+did not expose any minimum-size failure. All 15 tests in
+`tests/unit/socketTrayGeometry.test.ts` pass (14 existing + 1 new
+smallest-pocket probe), the full suite is green at 317/317, and
+`npx tsc -p apps/web/tsconfig.json --noEmit` is clean. See "Verification
+at the smaller diameter" below for what was specifically checked.
+
+## Verification at the smaller diameter
+
+The brief singled out the 10mm pocket as the one most likely to expose a
+minimum-size edge case in the boundary-rep construction (rim-to-floor
+stitching, earcut triangulation of the top face's hole, or the pocket wall
+loop). Beyond the existing manifold/exact-edge/raycast-at-center tests
+(which all still pass), this pass added a dedicated check —
+`off-center inside the smallest pocket (10mm), still open top-to-floor` —
+that raycasts 2mm off the 10mm pocket's own center (3mm in from its 5mm
+rim) rather than only at the exact axis, since a construction bug at small
+radius seemed more likely to show up away from the center than exactly on
+it. It passed identically to the equivalent largest-pocket check. Nothing
+in the construction itself (see `reference/socket-tray-recon.md`) scales
+with diameter in a way that would predict a small-diameter failure mode —
+`SOCKET_TRAY_POCKET_SEGMENTS` is a fixed 64-segment circle regardless of
+radius, so a 10mm pocket is triangulated exactly as finely as a 27mm one,
+just physically smaller — and the observed results bore that out.
+
 ## Open questions
 
-- **Pocket depth (now 14mm) is still the single most estimate-y number
-  here.** Lowered from 20mm this pass at the owner's direction, but that
-  doesn't resolve the underlying uncertainty — real 3/8"-drive standard
-  sockets vary more by size than a single flat depth suggests (a 15mm
-  socket and a 28mm socket are not usually the same height), and 14mm
-  wasn't checked against a real socket any more than 20mm was. Worth
-  explicitly measuring a few real sockets' heights before the next pass
-  rather than continuing to guess at one number for every diameter.
+- **Pocket depth (14mm) is still the single most estimate-y number here.**
+  Unchanged this pass, but the underlying uncertainty is unchanged too —
+  real 3/8"-drive standard sockets vary more by size than a single flat
+  depth suggests (a 10mm socket and a 27mm socket are not usually the same
+  height), and 14mm hasn't been checked against a real socket at any point
+  across either revision. Worth explicitly measuring a few real sockets'
+  heights before the next pass rather than continuing to guess at one
+  number for every diameter.
+- **The diameter range shifted down twice now (28→27mm top end, 15→10mm
+  bottom end) without an explanation recorded anywhere in this brief.**
+  Not a problem to fix, just worth flagging: if the shift reflects the
+  owner having measured or reconsidered actual socket sizes, that
+  reasoning would be worth capturing here for the next revision instead of
+  the report only tracking the "what changed" and not the "why."
 - **No radial clearance was added.** If the pockets print at exactly
   nominal diameter, FDM shrinkage/tolerance may make sockets a tight press
   fit or not fit at all — that's exactly what this coupon is for, but it
@@ -166,13 +234,16 @@ green at 316/316.
 
 ## Closing summary (plain English)
 
-The coupon is now a **240 x 60 x 18mm** block (down from 240 x 60 x 24mm)
-with the same five round blind pockets in a row — diameters 15, 18, 22, 25,
-and 28mm going left to right, unchanged — now **14mm deep** (down from
-20mm), floor still 4mm. Same open questions as before, just at the new
-depth: the single pocket depth applied to every diameter is still the
-number I'm least sure is right, and going shallower doesn't change that
-uncertainty either way. Nothing about the thinner floor/pocket looked
-riskier geometrically — the floor margin above the module's 2mm minimum
-didn't change (still 4mm), and every manifold/raycast test that would have
-caught a floor or seam problem at 14mm still passes cleanly.
+The coupon is still a **240 x 60 x 18mm** block, five round blind pockets
+in a row, 14mm deep, 4mm floor — none of that changed this pass. What
+changed is the diameters: **10, 14, 18, 22, and 27mm** going left to right
+(down from 15/18/22/25/28mm), same center positions as before, just
+smaller circles cut at each one. Verified directly against the
+regenerated STL's own vertex coordinates (not just the script's inputs)
+that all five diameters landed exactly right, to the ten-thousandth of a
+millimeter. Nothing looked riskier at the smaller end: the smallest
+pocket (10mm, the smallest this module has ever been asked to cut) passed
+every manifold, seam, and raycast check the same as every other pocket,
+including a new check specifically probing off-center inside it rather
+than just at its exact middle — there was no minimum-size construction
+failure to report.

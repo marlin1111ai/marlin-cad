@@ -26,7 +26,7 @@ freely as their primitives develop.
 
 - `socket-tray-sampler.stl` — Socket Tray coupon
   (`apps/web/src/lib/socketTrayGeometry.ts`), 240 x 60 x 18mm, one row of 5
-  round blind pockets at stepped diameters (15, 18, 22, 25, 28mm OD, all
+  round blind pockets at stepped diameters (10, 14, 18, 22, 27mm OD, all
   14mm deep, 4mm floor), left to right in ascending size. **Unvalidated**:
   these diameters and the pocket depth are the foreman's estimate for
   standard 3/8"-drive sockets, not a measurement against real sockets — the

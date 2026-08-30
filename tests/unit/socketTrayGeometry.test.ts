@@ -15,14 +15,16 @@ import { analyzeTriangleSoup } from "@/lib/svgImport";
 // scripts/generate-socket-tray-sampler.mjs -- same width/depth/thickness and
 // the same 5 pockets, so this test exercises exactly the geometry that gets
 // printed. See reference/socket-tray-sampler-report.md for the reasoning
-// behind these numbers. Pocket depth 14mm + 4mm floor = 18mm tray thickness
-// (reduced from the first 20mm-deep/24mm-thick coupon).
+// behind these numbers. Pocket depth 14mm + 4mm floor = 18mm tray thickness.
+// Diameters shifted from 15/18/22/25/28mm to 10/14/18/22/27mm this pass;
+// centers (x, z) are unchanged -- only the diameter list moved. 10mm is the
+// smallest pocket this module has been exercised against.
 const SAMPLER_POCKETS: SocketTrayPocket[] = [
-  { diameter: 15, depth: 14, x: 30, z: 30 },
-  { diameter: 18, depth: 14, x: 75, z: 30 },
-  { diameter: 22, depth: 14, x: 120, z: 30 },
-  { diameter: 25, depth: 14, x: 165, z: 30 },
-  { diameter: 28, depth: 14, x: 210, z: 30 },
+  { diameter: 10, depth: 14, x: 30, z: 30 },
+  { diameter: 14, depth: 14, x: 75, z: 30 },
+  { diameter: 18, depth: 14, x: 120, z: 30 },
+  { diameter: 22, depth: 14, x: 165, z: 30 },
+  { diameter: 27, depth: 14, x: 210, z: 30 },
 ];
 const SAMPLER_OPTIONS: SocketTrayOptions = { width: 240, depth: 60, thickness: 18, pockets: SAMPLER_POCKETS };
 
@@ -130,13 +132,26 @@ describe("socketTrayPositions: sampler coupon pockets are open blind pockets, no
     }
   });
 
-  it("off-center inside the largest pocket (28mm), still open top-to-floor", () => {
+  it("off-center inside the largest pocket (27mm), still open top-to-floor", () => {
     const largest = SAMPLER_POCKETS[SAMPLER_POCKETS.length - 1];
     const offset = largest.diameter / 2 - 3; // 3mm in from the rim, well clear of the wall
     const crossings = verticalCrossings(geometry, largest.x + offset, largest.z);
     expect(crossings.length).toBe(2);
     expect(crossings[0]).toBeCloseTo(0, 4);
     expect(crossings[1]).toBeCloseTo(topY - largest.depth, 4);
+  });
+
+  // 10mm is the smallest pocket this module has been exercised against (the
+  // 15-28mm coupon never went below 15mm) -- explicitly probe it off-center,
+  // not just at its exact center, the same way the largest pocket is probed
+  // above, in case a minimum-size edge case only shows up away from the axis.
+  it("off-center inside the smallest pocket (10mm), still open top-to-floor", () => {
+    const smallest = SAMPLER_POCKETS[0];
+    const offset = smallest.diameter / 2 - 3; // 3mm in from the rim, well clear of the wall
+    const crossings = verticalCrossings(geometry, smallest.x + offset, smallest.z);
+    expect(crossings.length).toBe(2);
+    expect(crossings[0]).toBeCloseTo(0, 4);
+    expect(crossings[1]).toBeCloseTo(topY - smallest.depth, 4);
   });
 });
 
