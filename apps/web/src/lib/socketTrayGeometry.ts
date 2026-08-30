@@ -35,7 +35,7 @@ import * as THREE from "three";
 
 export const DEFAULT_SOCKET_TRAY_WIDTH = 240;
 export const DEFAULT_SOCKET_TRAY_DEPTH = 60;
-export const DEFAULT_SOCKET_TRAY_THICKNESS = 24;
+export const DEFAULT_SOCKET_TRAY_THICKNESS = 18;
 
 // Circle resolution for a pocket wall/floor -- higher than Multiconnect's
 // 32-segment pegs (openGridSnapGeometry.ts-adjacent primitives can get away

@@ -23,16 +23,18 @@ import { socketTrayPositions } from "../apps/web/src/lib/socketTrayGeometry.ts";
 const OUT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "socket-tray-sampler.stl");
 
 // Same 5 pockets as SAMPLER_POCKETS in tests/unit/socketTrayGeometry.test.ts
-// -- keep both in sync if these numbers change.
+// -- keep both in sync if these numbers change. Pocket depth 14mm + 4mm
+// floor = 18mm tray thickness (reduced from the first 20mm-deep/24mm-thick
+// coupon -- see reference/socket-tray-sampler-report.md).
 const POCKETS = [
-  { diameter: 15, depth: 20, x: 30, z: 30 },
-  { diameter: 18, depth: 20, x: 75, z: 30 },
-  { diameter: 22, depth: 20, x: 120, z: 30 },
-  { diameter: 25, depth: 20, x: 165, z: 30 },
-  { diameter: 28, depth: 20, x: 210, z: 30 },
+  { diameter: 15, depth: 14, x: 30, z: 30 },
+  { diameter: 18, depth: 14, x: 75, z: 30 },
+  { diameter: 22, depth: 14, x: 120, z: 30 },
+  { diameter: 25, depth: 14, x: 165, z: 30 },
+  { diameter: 28, depth: 14, x: 210, z: 30 },
 ];
 
-const positions = socketTrayPositions({ width: 240, depth: 60, thickness: 24, pockets: POCKETS });
+const positions = socketTrayPositions({ width: 240, depth: 60, thickness: 18, pockets: POCKETS });
 
 function sketchForgeToZUp([x, y, z]) {
   return [x, -z, y];

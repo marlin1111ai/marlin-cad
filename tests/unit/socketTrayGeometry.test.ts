@@ -15,15 +15,16 @@ import { analyzeTriangleSoup } from "@/lib/svgImport";
 // scripts/generate-socket-tray-sampler.mjs -- same width/depth/thickness and
 // the same 5 pockets, so this test exercises exactly the geometry that gets
 // printed. See reference/socket-tray-sampler-report.md for the reasoning
-// behind these numbers.
+// behind these numbers. Pocket depth 14mm + 4mm floor = 18mm tray thickness
+// (reduced from the first 20mm-deep/24mm-thick coupon).
 const SAMPLER_POCKETS: SocketTrayPocket[] = [
-  { diameter: 15, depth: 20, x: 30, z: 30 },
-  { diameter: 18, depth: 20, x: 75, z: 30 },
-  { diameter: 22, depth: 20, x: 120, z: 30 },
-  { diameter: 25, depth: 20, x: 165, z: 30 },
-  { diameter: 28, depth: 20, x: 210, z: 30 },
+  { diameter: 15, depth: 14, x: 30, z: 30 },
+  { diameter: 18, depth: 14, x: 75, z: 30 },
+  { diameter: 22, depth: 14, x: 120, z: 30 },
+  { diameter: 25, depth: 14, x: 165, z: 30 },
+  { diameter: 28, depth: 14, x: 210, z: 30 },
 ];
-const SAMPLER_OPTIONS: SocketTrayOptions = { width: 240, depth: 60, thickness: 24, pockets: SAMPLER_POCKETS };
+const SAMPLER_OPTIONS: SocketTrayOptions = { width: 240, depth: 60, thickness: 18, pockets: SAMPLER_POCKETS };
 
 describe("socketTrayPositions: sampler coupon", () => {
   it("is watertight and manifold (0 boundary edges, 0 non-manifold edges)", () => {
@@ -64,7 +65,7 @@ describe("socketTrayPositions: sampler coupon", () => {
     expect(box.min.x).toBeCloseTo(0, 6);
     expect(box.max.x).toBeCloseTo(240, 6);
     expect(box.min.y).toBeCloseTo(0, 6);
-    expect(box.max.y).toBeCloseTo(24, 6);
+    expect(box.max.y).toBeCloseTo(18, 6);
     expect(box.min.z).toBeCloseTo(0, 6);
     expect(box.max.z).toBeCloseTo(60, 6);
   });
@@ -109,7 +110,7 @@ function verticalCrossings(geometry: THREE.BufferGeometry, x: number, z: number)
 
 describe("socketTrayPositions: sampler coupon pockets are open blind pockets, not sealed or through-holes", () => {
   const geometry = createSocketTrayGeometry(SAMPLER_OPTIONS);
-  const topY = 24;
+  const topY = 18;
 
   it.each(SAMPLER_POCKETS)("pocket d=$diameter: open top-to-floor, solid floor-to-bottom, at its exact center", (pocket) => {
     const crossings = verticalCrossings(geometry, pocket.x, pocket.z);
@@ -165,7 +166,7 @@ describe("socketTrayPositions: validation", () => {
   it("normalize helpers fall back to defaults for undefined and throw on non-positive values", () => {
     expect(normalizeSocketTrayWidth(undefined)).toBe(240);
     expect(normalizeSocketTrayDepth(undefined)).toBe(60);
-    expect(normalizeSocketTrayThickness(undefined)).toBe(24);
+    expect(normalizeSocketTrayThickness(undefined)).toBe(18);
     expect(() => normalizeSocketTrayWidth(0)).toThrow();
   });
 });
