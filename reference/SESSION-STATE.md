@@ -33,8 +33,11 @@ Where things stand right now.
 - Bed fit: 240mm leaves 16mm spare under the X1C's 256mm bed. Six pockets
   at the earlier 45mm pitch would have needed 285mm; the owner approved the
   36mm pitch instead.
-- No back plate yet: the coupon is a standalone block. The OpenGrid Snap
-  back-plate mount for the tray is not built.
+- No back plate on THIS coupon: it is deliberately a standalone block, the
+  flat test piece. The wall-mounted version is a separate shape and module —
+  see the Mounted Socket Tray section below — and its back is a Multiconnect
+  slotted plate, not the OpenGrid Snap the earlier plan assumed (see
+  DECISIONS.md).
 - Registered in the editor (`fe3e829`): a catalog entry in the OpenGrid
   section of the insert menu, and an inspector with Width / Depth /
   Thickness / Pocket Depth rows plus a per-pocket Diameter / X / Z list
@@ -57,8 +60,71 @@ Where things stand right now.
   `reference/reports/socket-tray-ui-recon.md`,
   `reference/reports/socket-tray-ui-build.md`.
 
+## Mounted Socket Tray — active feature, coupon stage (physical gate pending)
+
+The wall-hanging sibling of the flat tray: a Multiconnect slotted back plate
+with NO pegs, and a shelf-like tray projecting forward from its bottom
+carrying round blind pockets. The flat Socket Tray is unchanged by this work
+and remains the test piece.
+
+- Module: `apps/web/src/lib/mountedSocketTrayGeometry.ts` — new sibling
+  primitive, additive only. Neither `socketTrayGeometry.ts` nor
+  `multiconnectContainerGeometry.ts` was edited; both are imported from.
+- ONE solid, boundary representation only — no CSG, no boolean union, no
+  concatenated meshes. The plate and the tray are not two bodies joined at a
+  seam: together they are a single prism whose cross-section in the (Y, Z)
+  plane is an L, extruded along the width. The L outline is built once as one
+  six-point array, and both the extruded side faces and the two end caps read
+  their corners out of that same array, so the junction vertices are
+  bit-identical because they ARE the same doubles. There is no seam to stitch.
+- Slot features come from the same baked source the validated wrench racks
+  use (`multiconnectSlotMesh.ts`); the pocket guards are the flat tray's own
+  exported constants, so "the same rule" is the same constant, not a copy.
+- Plate defaults are the validated wrench-rack recipe: 240 × 60mm, 10mm
+  thick, 28mm slot spacing, 8 slots at x = 22 … 218.
+- Coupon: `test-prints/mounted-socket-tray-coupon.stl` — footprint
+  **240 × 70 × 60mm** (240 wide, 70 deep = tray 60 + plate 10, 60 tall),
+  ASCII STL, 3,524 triangles. Tray 60mm deep and 18mm thick; three round
+  blind pockets 14mm deep over a 4mm floor, diameters **14, 19, 25mm** at
+  x = 30 / 120 / 210 on the z = 30 centreline (30mm end margins, 90mm pitch).
+  240mm leaves 16mm spare under the X1C's 256mm bed.
+- Generator: `scripts/generate-mounted-socket-tray-coupon.mjs`.
+- Tests: `tests/unit/mountedSocketTrayGeometry.test.ts` — 40 tests, and
+  `tests/unit/mountedSocketTrayShapeRegistration.test.ts` — 12 tests.
+  Coverage includes the exact directed-edge check over the whole mesh, a
+  dedicated inner-corner test isolating the plate-to-tray junction line,
+  per-pocket raycasts, and a check that the slot channel is unobstructed
+  along its full run at all 8 slots.
+- Raycast of the EXPORTED STL (not just the in-memory mesh): every pocket
+  open from the tray top down to its 4mm floor and solid below it; the
+  channel open along its full run at all 8 slots with the blind floor
+  intact; 0 boundary and 0 non-manifold edges.
+- Registered in the editor (`c98cff5`): a catalog entry in the OpenGrid
+  section, and an inspector with Plate Width / Plate Height / Plate Thickness
+  / Slot Spacing / Slot Count / Tray Depth / Tray Thickness / Pocket Depth
+  rows plus a per-pocket Diameter / X / Z list (add / remove, inline module
+  error). Same eight-file registration pattern as the flat tray. Plate width
+  maps to the app's X, plate height to its Y-up height, and `shape.depth`
+  holds the solid's full Z extent so the selection frame matches the mesh.
+  Owner-tested in the dev app and approved.
+- Status: **unvalidated — the coupon has not been printed.**
+- Full detail: `reference/reports/socket-tray-mounted-recon.md`,
+  `reference/reports/mounted-socket-tray-build.md`.
+
+## Physical gate — both coupons are unprinted
+
+Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
+`test-prints/mounted-socket-tray-coupon.stl` (mounted, 3 pockets) has been
+printed. **No production tray is built until both are printed and
+hand-verified.**
+
 ## Recent shipped work (all pushed to origin/main)
 
+- Mounted Socket Tray added: new geometry module, 52 tests, generator
+  script, coupon STL, and editor registration (`c98cff5`).
+- Read-only recon for a wall-mounted Socket Tray, which established that the
+  wrench racks hang on Multiconnect slots rather than the OpenGrid Snap
+  (`4eecc37`).
 - Socket Tray registered in the editor: catalog entry, inspector, pocket
   card, registration tests (`fe3e829`).
 - Read-only recon report for the Socket Tray UI registration (`1827a84`).
@@ -114,6 +180,8 @@ Where things stand right now.
 - Metric 2, Metric 3, SAE 1, SAE 2, SAE 3: queued to print.
 - Socket Tray sampler coupon (`test-prints/socket-tray-sampler.stl`): not
   yet printed; it is the physical gate for the socket work.
+- Mounted Socket Tray coupon (`test-prints/mounted-socket-tray-coupon.stl`):
+  not yet printed; the second half of that gate.
 
 ## Other validated primitives
 
@@ -123,9 +191,11 @@ Where things stand right now.
 
 ## Test suite
 
-326 unit tests passing across 47 files (`npm test`, 2026-09-04), of which
-17 are in `tests/unit/socketTrayGeometry.test.ts` and 7 in
-`tests/unit/socketTrayShapeRegistration.test.ts`.
+378 unit tests passing across 49 files (`npm test`, 2026-09-04), of which
+17 are in `tests/unit/socketTrayGeometry.test.ts`, 7 in
+`tests/unit/socketTrayShapeRegistration.test.ts`, 40 in
+`tests/unit/mountedSocketTrayGeometry.test.ts` and 12 in
+`tests/unit/mountedSocketTrayShapeRegistration.test.ts`.
 
 ## Printers
 
