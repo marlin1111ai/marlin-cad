@@ -120,6 +120,11 @@ hand-verified.**
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Docker workflow tags images with the `package.json` version on every push
+  to `main`, in addition to `main` / `sha` / `latest`; version bumped to
+  `1.1.0` (`2c3767d`).
+- Release investigation and Actions-enablement reports
+  (`2e19746`, `2bde431`, `23571b9`).
 - Mounted Socket Tray added: new geometry module, 52 tests, generator
   script, coupon STL, and editor registration (`c98cff5`).
 - Read-only recon for a wall-mounted Socket Tray, which established that the
@@ -155,24 +160,59 @@ hand-verified.**
 - Rebuild verified end to end on this box: clone, `npm install`,
   `npm run dev` on port 3000, Wrench Rack Metric 2 preset loads and renders,
   STL export confirmed working.
-- **Docker is not installed here.** The `docker:*` npm scripts do not run on
-  this box; Unraid pulls the production image from GHCR instead.
+- **Docker is deliberately not installed here.** The owner's process is
+  Claude Code publishes to GitHub, the owner pulls on Unraid; Docker runs
+  on Unraid only. The `docker:*` npm scripts do not run on this box.
 
 ## Production deployment
 
-- marlin-cad runs as a Docker container on Unraid, pulled from
-  `ghcr.io/marlin1111ai/marlin-cad:1.0.0`.
+- marlin-cad runs as a Docker container on Unraid (`192.168.1.250`), pulled
+  from `ghcr.io/marlin1111ai/marlin-cad:1.1.0`. Docker runs on Unraid only —
+  not on the Linux dev box, and the owner does not want it there.
 - Host port 3001 → container port 3000.
 - Host path `/mnt/user/appdata/marlin-cad/projects` → `/data/projects`.
   `SKETCHFORGE_SHARED_PROJECTS_DIR=/data/projects` is baked into the image, so
   only the path mapping is needed; without it, projects live inside the
   container and are lost on update.
-- Verified working in the browser. Noticeably faster than dev mode — it is a
-  production build, not a dev compile.
+- The `1.0.0` image was built and pushed from Unraid by hand, before GitHub
+  Actions was enabled on this fork. `1.1.0` is the first image GitHub
+  Actions built and published; see the Release process subsection below.
+- The prior `marlin-cad` container was found absent from the Unraid box
+  (cause not recorded) and was recreated fresh from the `1.1.0` tag with the
+  settings above. Verified working in the browser.
+- Blinking Docker Manager icon fix re-applied on Unraid:
+  `cp /mnt/user/appdata/marlin-cad/freecad.png /usr/local/emhttp/plugins/dynamix.docker.manager/images/question.png`
+  — RAM-only, lost on reboot.
 - Dev on the Linux box is unchanged: `npm run dev`, port 3000. The container
   never binds 3000 on the host.
 - Image built from `deploy/docker/Dockerfile`; the root Dockerfile was removed
   in `edb8101`.
+
+### Release process
+
+1. Claude Code bumps the version in the root `package.json` and pushes to
+   `main`.
+2. GitHub Actions (`.github/workflows/docker.yml`) builds the image and
+   publishes it to `ghcr.io/marlin1111ai/marlin-cad:<version>` (alongside
+   `main`, `sha-<short>`, and `latest`).
+3. The owner changes the tag in the Unraid container's image field to the
+   new version and applies the update.
+
+Actions had never run on this repo because it is a fork of
+`Formsmith746/SketchForge-3D` — GitHub disables workflows by default on a
+fork that already contained workflow files. The owner enabled it manually
+from the Actions tab and ran "Build and Push Docker Images" once
+(run #1, on `23571b9`). That run failed at the push step with
+`denied: permission_denied: write_package`; fixed by (a) Settings → Actions
+→ General → Workflow permissions → "Read and write permissions", and
+(b) the package's own settings at
+`github.com/users/marlin1111ai/packages/container/marlin-cad/settings` →
+Manage Actions access → Add Repository `marlin-cad` → role Write. The re-run
+succeeded and published `1.1.0`. Full detail:
+`reference/reports/release-1.1.0.md`,
+`reference/reports/release-1.1.0-actions.md`,
+`reference/reports/release-1.1.0-publish.md`,
+`reference/reports/release-1.1.0-banked.md`.
 
 ## Print status
 
