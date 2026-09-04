@@ -16,6 +16,20 @@ import {
 } from "@/lib/openConnectContainerGeometry";
 import { DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
 import {
+  createMountedSocketTrayGeometry,
+  mountedSocketTrayDimensions,
+  mountedSocketTrayPositions,
+  DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
+  DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_HEIGHT,
+  DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS,
+  DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_WIDTH,
+  DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH,
+  DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT,
+  DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING,
+  DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS,
+  type MountedSocketTrayOptions,
+} from "@/lib/mountedSocketTrayGeometry";
+import {
   createMulticonnectPlateGeometry,
   DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS,
   DEFAULT_MULTICONNECT_PEG_TILT_DEG,
@@ -36,7 +50,7 @@ import {
   type SocketTrayOptions,
 } from "@/lib/socketTrayGeometry";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
-import type { ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
+import type { MountedSocketTrayShapePocket, ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
 
@@ -78,6 +92,12 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // section next to the Multiconnect Container; the pocket list is edited in
   // the inspector (SocketTrayPocketCard), like the PegPlate's peg list.
   { id: "socket-tray", name: "Socket Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "socketTray", color: "#3b82f6", category: OPENGRID_CATEGORY },
+  // Mounted Socket Tray: the wall-hanging sibling of the flat tray above -- a
+  // Multiconnect slotted back plate (no pegs) with the pocketed tray
+  // projecting forward from it, built as one solid. Same box-icon stand-in,
+  // one catalog entry in the OpenGrid section; the pocket list is edited in
+  // the inspector (MountedSocketTrayPocketCard).
+  { id: "mounted-socket-tray", name: "Mounted Socket Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "mountedSocketTray", color: "#0ea5a4", category: OPENGRID_CATEGORY },
   // Built-in parts library (multiconnectPresets.ts): each preset is a normal
   // multiconnectContainer entry whose presetId makes makeShapeFromAsset
   // pre-fill the inserted shape. Presets group under their own labeled
@@ -164,6 +184,83 @@ export function socketTrayLayoutError(shape: WorkplaneShape): string | null {
     if (edge) return `Pocket ${Number(edge[1]) + 1} is too close to the tray edge (${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm clearance is required).`;
     const floor = message.match(/pocket (\d+): depth .* floor/);
     if (floor) return `Pocket Depth leaves less than the ${MIN_SOCKET_TRAY_FLOOR_THICKNESS}mm minimum floor — reduce Pocket Depth or increase Thickness.`;
+    const invalid = message.match(/pocket (\d+): diameter/);
+    if (invalid) return `Pocket ${Number(invalid[1]) + 1} has invalid values.`;
+    return message;
+  }
+}
+
+// Insert defaults for the Mounted Socket Tray: a printable coupon, NOT a
+// production tray. The plate numbers are the physically validated wrench-rack
+// recipe (multiconnectPresets.ts): 240 x 60 x 10mm at 28mm slot spacing, which
+// is 8 slots centered on the plate. Tray 60mm deep and 18mm thick, pockets
+// 14mm deep over a 4mm floor (18 - 14). Three pockets at 14 / 19 / 25mm on the
+// z = 30 tray centerline, 30mm end margins like the flat coupon, so the pitch
+// is (240 - 30 - 30) / 2 = 90mm and the centers land at 30 / 120 / 210.
+// See reference/reports/mounted-socket-tray-build.md for the arithmetic.
+export const DEFAULT_MOUNTED_SOCKET_TRAY_SHAPE_POCKETS: ReadonlyArray<MountedSocketTrayShapePocket> = [
+  { diameter: 14, x: 30, z: 30 },
+  { diameter: 19, x: 120, z: 30 },
+  { diameter: 25, x: 210, z: 30 },
+];
+
+// The single shape -> geometry-options mapping for the Mounted Socket Tray:
+// the viewport arm, the editor's export arm, and the inspector's validation
+// all go through this. Plate width -> shape.width (X), plate height ->
+// shape.height (the app's Y-up dimension), and the solid's full Z extent ->
+// shape.depth, with the tray projection and plate thickness held in their own
+// fields. That is the same axis rule the flat Socket Tray's build report
+// established (the app's `height` IS the Y-up dimension); here the Y-up
+// dimension is the plate's height rather than the tray's thickness, because
+// this part stands up against a board instead of lying flat.
+export function mountedSocketTrayOptionsForShape(shape: WorkplaneShape): MountedSocketTrayOptions {
+  return {
+    plateWidth: shapeWidth(shape),
+    plateHeight: shape.height,
+    plateThickness: shape.mountedTrayPlateThickness ?? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS,
+    slotSpacing: shape.mountedTraySlotSpacing ?? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING,
+    slotCount: shape.mountedTraySlotCount ?? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT,
+    trayDepth: shape.mountedTrayProjection ?? DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
+    trayThickness: shape.mountedTrayThickness ?? DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS,
+    pocketDepth: shape.mountedTrayPocketDepth ?? DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH,
+    pockets: (shape.mountedTrayPockets ?? []).map((pocket) => ({ diameter: pocket.diameter, x: pocket.x, z: pocket.z })),
+  };
+}
+
+// The geometry module THROWS on an invalid layout. The render/export arms must
+// never crash on a half-edited shape, so they fall back to the bare tray (no
+// pockets), and then to the module's own defaults if even that is rejected;
+// the inspector shows the message inline instead.
+export function createMountedSocketTrayGeometryForShape(shape: WorkplaneShape) {
+  const options = mountedSocketTrayOptionsForShape(shape);
+  try {
+    return createMountedSocketTrayGeometry(options);
+  } catch {
+    try {
+      return createMountedSocketTrayGeometry({ ...options, pockets: [] });
+    } catch {
+      return createMountedSocketTrayGeometry({});
+    }
+  }
+}
+
+// Friendly inline message for the inspector: null when the layout is valid,
+// otherwise the geometry module's rejection translated to 1-based pocket
+// numbers and plain language.
+export function mountedSocketTrayLayoutError(shape: WorkplaneShape): string | null {
+  const options = mountedSocketTrayOptionsForShape(shape);
+  try {
+    mountedSocketTrayPositions(options);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const overlap = message.match(/pockets (\d+) and (\d+): footprints overlap/);
+    if (overlap) return `Pockets ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${SOCKET_TRAY_POCKET_GAP}mm between them.`;
+    const edge = message.match(/pocket (\d+): footprint .* edge/);
+    if (edge) return `Pocket ${Number(edge[1]) + 1} is too close to the tray edge (${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm clearance is required).`;
+    if (/minimum floor/.test(message)) return `Pocket Depth leaves less than the ${MIN_SOCKET_TRAY_FLOOR_THICKNESS}mm minimum floor — reduce Pocket Depth or increase Tray Thickness.`;
+    if (/do not fit/.test(message)) return "Too many slots for this plate width — reduce Slot Count, reduce Slot Spacing, or widen the plate.";
+    if (/tray thickness/.test(message)) return "Tray Thickness must be less than Plate Height.";
     const invalid = message.match(/pocket (\d+): diameter/);
     if (invalid) return `Pocket ${Number(invalid[1]) + 1} has invalid values.`;
     return message;
@@ -326,10 +423,14 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   // Socket Tray: width/depth/thickness straight from the module's defaults;
   // thickness is the Y-up dimension, so it becomes shape.height.
   const socketTrayDefaults = asset.kind === "socketTray" ? socketTrayDimensions({}) : undefined;
+  // Mounted Socket Tray: plate width/height straight from the module's
+  // defaults; `depth` is the solid's full Z extent (tray projection + plate
+  // thickness), so the selection frame matches the mesh.
+  const mountedSocketTrayDefaults = asset.kind === "mountedSocketTray" ? mountedSocketTrayDimensions({}) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.height : openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.width : openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.depth : openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : asset.kind === "text" ? 28 : size;
 
   const shape: WorkplaneShape = {
     id: createLocalId(asset.id),
@@ -394,6 +495,13 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     multiconnectPegs: asset.kind === "multiconnectContainer" ? [] : undefined,
     socketTrayPocketDepth: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH : undefined,
     socketTrayPockets: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
+    mountedTrayPlateThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS : undefined,
+    mountedTraySlotSpacing: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING : undefined,
+    mountedTraySlotCount: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT : undefined,
+    mountedTrayProjection: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH : undefined,
+    mountedTrayThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS : undefined,
+    mountedTrayPocketDepth: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH : undefined,
+    mountedTrayPockets: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
     locked: false,
     hidden: false,
   };

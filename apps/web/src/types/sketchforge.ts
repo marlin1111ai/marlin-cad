@@ -22,7 +22,8 @@ export type ShapeKind =
   | "openConnectContainer"
   | "openGridSnap"
   | "multiconnectContainer"
-  | "socketTray";
+  | "socketTray"
+  | "mountedSocketTray";
 
 export type ShapeAsset = {
   id: string;
@@ -155,6 +156,14 @@ export type MulticonnectShapePeg = { diameter: number; x: number };
 // is shared across pockets (socketTrayPocketDepth), not per row.
 export type SocketTrayShapePocket = { diameter: number; x: number; z: number };
 
+// One pocket row in the inspector's Mounted Socket Tray pocket list. Same
+// meaning as SocketTrayShapePocket: `x` from the tray's LEFT edge, `z` from
+// its FRONT edge, both in geometry space. Pockets open upward on a horizontal
+// shelf, so there is no as-mounted mirror -- see the frame note in
+// mountedSocketTrayGeometry.ts. Depth is shared across pockets
+// (mountedTrayPocketDepth), not per row.
+export type MountedSocketTrayShapePocket = { diameter: number; x: number; z: number };
+
 export type SketchRevolveSettings = {
   startAngle: number;
   sweepAngle: number;
@@ -284,6 +293,17 @@ export type WorkplaneShape = {
   // shared pocket depth and the pocket list.
   socketTrayPocketDepth?: number;
   socketTrayPockets?: SocketTrayShapePocket[];
+  // Mounted Socket Tray (kind "mountedSocketTray"). Plate width / plate height
+  // live in width / height (height is the Y-up dimension); depth holds the
+  // solid's full Z extent, i.e. tray projection + plate thickness, so the
+  // selection frame matches the mesh. Everything else is dedicated.
+  mountedTrayPlateThickness?: number;
+  mountedTraySlotSpacing?: number;
+  mountedTraySlotCount?: number;
+  mountedTrayProjection?: number;
+  mountedTrayThickness?: number;
+  mountedTrayPocketDepth?: number;
+  mountedTrayPockets?: MountedSocketTrayShapePocket[];
   text?: string;
   font?: string;
   importedMesh?: {

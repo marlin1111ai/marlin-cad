@@ -57,10 +57,22 @@ import {
 } from "@/lib/openConnectContainerGeometry";
 import { normalizeOpenGridSnapBoardType, normalizeOpenGridSnapBodyShape, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
 import {
+  DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
+  DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS,
+  DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH,
+  DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT,
+  DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING,
+  DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS,
+  MAX_MOUNTED_SOCKET_TRAY_SLOT_COUNT,
+  MIN_MOUNTED_SOCKET_TRAY_SLOT_COUNT,
+} from "@/lib/mountedSocketTrayGeometry";
+import {
   DEFAULT_MULTICONNECT_PEG_FILLET_RADIUS,
   DEFAULT_MULTICONNECT_PEG_TILT_DEG,
+  MAX_MULTICONNECT_SLOT_SPACING,
   MAX_MULTICONNECT_SLOT_TOLERANCE,
   MIN_MULTICONNECT_PLATE_DIMENSION,
+  MIN_MULTICONNECT_SLOT_SPACING,
   MIN_MULTICONNECT_SLOT_TOLERANCE,
   MULTICONNECT_BACK_THICKNESS,
   multiconnectMaxCornerRadius,
@@ -72,7 +84,7 @@ import {
   normalizeMulticonnectSlotSpacing,
   normalizeMulticonnectSlotTolerance,
 } from "@/lib/multiconnectContainerGeometry";
-import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, multiconnectPegLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
+import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, mountedSocketTrayLayoutError, multiconnectPegLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
 import { MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
@@ -158,7 +170,7 @@ function formatPropertyNumber(value: number, accuracy: MeasurementAccuracy, step
 
 function propertyUsesLengthUnit(label: string) {
   return (
-    ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness", "Plate Thickness", "Corner Radius", "Peg Length", "Peg Fillet", "Peg Row Z", "Depth", "Pocket Depth"].includes(label)
+    ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness", "Plate Thickness", "Corner Radius", "Peg Length", "Peg Fillet", "Peg Row Z", "Depth", "Pocket Depth", "Plate Width", "Plate Height", "Slot Spacing", "Tray Depth", "Tray Thickness"].includes(label)
     // Multiconnect peg-list rows: "Peg N Diameter" and the mounted-view
     // position field are millimeter values too.
     || label.endsWith("Diameter")
@@ -412,6 +424,29 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Depth", value: depth, min: minFootprint, max: 320, step: 0.5, onChange: setDepth },
       { label: "Thickness", value: shape.height, min: MIN_SOCKET_TRAY_FLOOR_THICKNESS, max: 60, step: 0.5, onChange: setHeight },
       { label: "Pocket Depth", value: pocketDepth, min: 0.5, max: 60, step: 0.5, onChange: (value) => onUpdate({ socketTrayPocketDepth: value }) },
+    ];
+  }
+
+  if (shape.kind === "mountedSocketTray") {
+    // Plate Width / Plate Height are the plate's X / Y-up footprint and live in
+    // shape.width / shape.height. shape.depth is the solid's full Z extent
+    // (tray projection + plate thickness) and is not edited directly: the Tray
+    // Depth and Plate Thickness rows write their own field AND resync depth, so
+    // the selection frame keeps matching the mesh. Slot Count is a count, not a
+    // length -- it is deliberately absent from propertyUsesLengthUnit.
+    const plateThickness = shape.mountedTrayPlateThickness ?? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS;
+    const trayProjection = shape.mountedTrayProjection ?? DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH;
+    const trayThickness = shape.mountedTrayThickness ?? DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS;
+    const mountedPocketDepth = shape.mountedTrayPocketDepth ?? DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH;
+    return [
+      { label: "Plate Width", value: width, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, step: 0.5, onChange: setWidth },
+      { label: "Plate Height", value: shape.height, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, step: 0.5, onChange: setHeight },
+      { label: "Plate Thickness", value: plateThickness, min: MULTICONNECT_BACK_THICKNESS, max: 20, step: 0.5, onChange: (value) => onUpdate({ mountedTrayPlateThickness: value, depth: trayProjection + value }) },
+      { label: "Slot Spacing", value: shape.mountedTraySlotSpacing ?? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING, min: MIN_MULTICONNECT_SLOT_SPACING, max: MAX_MULTICONNECT_SLOT_SPACING, step: 0.5, onChange: (value) => onUpdate({ mountedTraySlotSpacing: value }) },
+      { label: "Slot Count", value: shape.mountedTraySlotCount ?? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT, min: MIN_MOUNTED_SOCKET_TRAY_SLOT_COUNT, max: MAX_MOUNTED_SOCKET_TRAY_SLOT_COUNT, step: 1, onChange: (value) => onUpdate({ mountedTraySlotCount: Math.round(value) }) },
+      { label: "Tray Depth", value: trayProjection, min: SOCKET_TRAY_POCKET_EDGE_CLEARANCE * 2, max: 320, step: 0.5, onChange: (value) => onUpdate({ mountedTrayProjection: value, depth: value + plateThickness }) },
+      { label: "Tray Thickness", value: trayThickness, min: MIN_SOCKET_TRAY_FLOOR_THICKNESS, max: 60, step: 0.5, onChange: (value) => onUpdate({ mountedTrayThickness: value }) },
+      { label: "Pocket Depth", value: mountedPocketDepth, min: 0.5, max: 60, step: 0.5, onChange: (value) => onUpdate({ mountedTrayPocketDepth: value }) },
     ];
   }
 
@@ -787,6 +822,9 @@ export function ShapeInspector({
       {shape.kind === "socketTray" ? (
         <SocketTrayPocketCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
       ) : null}
+      {shape.kind === "mountedSocketTray" ? (
+        <MountedSocketTrayPocketCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
+      ) : null}
       {gearType === "helical" ? (
         <div className={`property-card ${gearHelixOpen ? "" : "collapsed"}`}>
           <button
@@ -947,6 +985,104 @@ function SocketTrayPocketCard({
       </button>
       {open ? (
         <div className="property-list" id={`socket-tray-pockets-${shape.id}`}>
+          {pockets.map((pocket, index) => (
+            <div key={index}>
+              <RangeProperty
+                label={`Pocket ${index + 1} Diameter`}
+                value={pocket.diameter}
+                min={2}
+                max={60}
+                step={0.1}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(diameter) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, diameter } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Pocket ${index + 1} X`}
+                value={pocket.x}
+                min={0}
+                max={trayWidth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(x) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, x } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Pocket ${index + 1} Z`}
+                value={pocket.z}
+                min={0}
+                max={trayDepth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(z) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, z } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setPockets(pockets.filter((_, i) => i !== index))}>
+                <span>Remove Pocket {index + 1}</span>
+              </button>
+            </div>
+          ))}
+          {layoutError ? (
+            <p role="alert" style={{ color: "#e0524d", margin: "4px 2px", fontSize: "0.86em", lineHeight: 1.35 }}>
+              {layoutError}
+            </p>
+          ) : null}
+          <button className="inspector-action-button" type="button" disabled={disabled} onClick={addPocket}>
+            <span>Add Pocket</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Pocket list editor for the Mounted Socket Tray -- the same shape as
+// SocketTrayPocketCard above, reading the mounted tray's own fields. x is from
+// the tray's LEFT edge and z from its FRONT edge; pockets open upward on a
+// horizontal shelf, so there is no as-mounted mirror. A bad layout (overlap,
+// edge crowding, too thin a floor, too many slots) does not crash anything:
+// the viewport falls back to the bare tray and the module's rejection shows
+// here as an inline message.
+function MountedSocketTrayPocketCard({
+  shape,
+  workspace,
+  disabled,
+  onUpdate,
+  onInteractionActiveChange,
+}: {
+  shape: WorkplaneShape;
+  workspace: WorkplaneWorkspaceSettings;
+  disabled?: boolean;
+  onUpdate: ShapeInspectorUpdate;
+  onInteractionActiveChange?: (active: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const pockets = shape.mountedTrayPockets ?? [];
+  const trayWidth = shapeWidth(shape);
+  const trayDepth = shape.mountedTrayProjection ?? DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH;
+  const layoutError = mountedSocketTrayLayoutError(shape);
+  const setPockets = (next: NonNullable<WorkplaneShape["mountedTrayPockets"]>) => onUpdate({ mountedTrayPockets: next });
+  const addPocket = () => {
+    const last = pockets[pockets.length - 1];
+    setPockets([...pockets, { diameter: 20, x: last ? last.x + 36 : 30, z: trayDepth / 2 }]);
+  };
+  return (
+    <div className={`property-card ${open ? "" : "collapsed"}`}>
+      <button
+        className="property-card-header"
+        type="button"
+        aria-expanded={open}
+        aria-controls={`mounted-socket-tray-pockets-${shape.id}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>Pockets</span>
+        <ChevronUp className={open ? "" : "collapsed"} size={25} strokeWidth={2.8} />
+      </button>
+      {open ? (
+        <div className="property-list" id={`mounted-socket-tray-pockets-${shape.id}`}>
           {pockets.map((pocket, index) => (
             <div key={index}>
               <RangeProperty
