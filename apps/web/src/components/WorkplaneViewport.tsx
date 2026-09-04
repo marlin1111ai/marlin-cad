@@ -33,7 +33,7 @@ import { createMoveDimensionOverlay, type MoveDimensionAxis, type MoveDimensionO
 import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
 import { createOpenConnectContainerGeometry } from "@/lib/openConnectContainerGeometry";
 import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
-import { createMulticonnectGeometryForShape } from "@/lib/shapeCatalog";
+import { createMulticonnectGeometryForShape, createSocketTrayGeometryForShape } from "@/lib/shapeCatalog";
 import {
   horizontalPlacementWorkplane,
   placementWorkplaneCoordinates,
@@ -967,6 +967,8 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     multiconnectPegTilt: shape.multiconnectPegTilt,
     multiconnectPegRowZ: shape.multiconnectPegRowZ,
     multiconnectPegs: shape.multiconnectPegs,
+    socketTrayPocketDepth: shape.socketTrayPocketDepth,
+    socketTrayPockets: shape.socketTrayPockets,
     text: shape.text,
     font: shape.font,
   });
@@ -7252,6 +7254,12 @@ function createShapeObject(
       // the inspector shows that validation message, the render never throws.
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createMulticonnectGeometryForShape(shape)), material, shape);
       break;
+    case "socketTray":
+      // Same mapping-helper pattern as multiconnectContainer above: the tray's
+      // fields map to the module's options in shapeCatalog.ts, and an invalid
+      // mid-edit pocket layout falls back to the bare tray instead of throwing.
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createSocketTrayGeometryForShape(shape)), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7370,7 +7378,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer", "socketTray"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {

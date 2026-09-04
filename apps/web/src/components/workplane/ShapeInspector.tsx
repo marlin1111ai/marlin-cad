@@ -72,7 +72,8 @@ import {
   normalizeMulticonnectSlotSpacing,
   normalizeMulticonnectSlotTolerance,
 } from "@/lib/multiconnectContainerGeometry";
-import { DEFAULT_MULTICONNECT_PEG_LENGTH, multiconnectPegLayoutError } from "@/lib/shapeCatalog";
+import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, multiconnectPegLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
+import { MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
@@ -157,11 +158,14 @@ function formatPropertyNumber(value: number, accuracy: MeasurementAccuracy, step
 
 function propertyUsesLengthUnit(label: string) {
   return (
-    ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness", "Plate Thickness", "Corner Radius", "Peg Length", "Peg Fillet", "Peg Row Z"].includes(label)
+    ["Radius", "Length", "Width", "Height", "Bevel", "Top Radius", "Base Radius", "Thickness", "Tooth Size", "Tooth Width", "Center Hole", "Internal Width", "Internal Height", "Internal Depth", "Wall Thickness", "Base Thickness", "Plate Thickness", "Corner Radius", "Peg Length", "Peg Fillet", "Peg Row Z", "Depth", "Pocket Depth"].includes(label)
     // Multiconnect peg-list rows: "Peg N Diameter" and the mounted-view
     // position field are millimeter values too.
     || label.endsWith("Diameter")
     || label.startsWith("Position")
+    // Socket Tray pocket-list rows: "Pocket N X" / "Pocket N Z" centers are
+    // millimeter values too ("Pocket N Diameter" is covered above).
+    || /^Pocket \d+ [XZ]$/.test(label)
   );
 }
 
@@ -393,6 +397,22 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       );
     }
     return properties;
+  }
+
+  if (shape.kind === "socketTray") {
+    const pocketDepth = shape.socketTrayPocketDepth ?? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH;
+    // Width/Depth are the tray footprint (X/Z); Thickness is the tray's Y-up
+    // dimension and lives in shape.height. Pocket Depth is shared by every
+    // pocket. The geometry module's own layout guards (minimum floor, edge
+    // clearance, pocket gap) are reported inline by the pocket card rather
+    // than clamped here, the same way the PegPlate handles peg layouts.
+    const minFootprint = SOCKET_TRAY_POCKET_EDGE_CLEARANCE * 2;
+    return [
+      { label: "Width", value: width, min: minFootprint, max: 320, step: 0.5, onChange: setWidth },
+      { label: "Depth", value: depth, min: minFootprint, max: 320, step: 0.5, onChange: setDepth },
+      { label: "Thickness", value: shape.height, min: MIN_SOCKET_TRAY_FLOOR_THICKNESS, max: 60, step: 0.5, onChange: setHeight },
+      { label: "Pocket Depth", value: pocketDepth, min: 0.5, max: 60, step: 0.5, onChange: (value) => onUpdate({ socketTrayPocketDepth: value }) },
+    ];
   }
 
   if (shape.kind === "openGridSnap") {
@@ -764,6 +784,9 @@ export function ShapeInspector({
       {shape.kind === "multiconnectContainer" && shape.multiconnectShapeType === "PegPlate" ? (
         <MulticonnectPegCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
       ) : null}
+      {shape.kind === "socketTray" ? (
+        <SocketTrayPocketCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
+      ) : null}
       {gearType === "helical" ? (
         <div className={`property-card ${gearHelixOpen ? "" : "collapsed"}`}>
           <button
@@ -873,6 +896,104 @@ function MulticonnectPegCard({
           ) : null}
           <button className="inspector-action-button" type="button" disabled={disabled} onClick={addPeg}>
             <span>Add Peg</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Pocket list editor for the Socket Tray -- the same shape as
+// MulticonnectPegCard above: add/remove pockets, each row a diameter and an
+// (x, z) center in the tray's own geometry space (x from the left edge, z
+// from the front edge; the tray lies flat, so there is no as-mounted mirror
+// -- see socketTrayGeometry.ts). Layout mistakes (overlap, edge crowding, a
+// too-thin floor) don't crash anything: the viewport falls back to the bare
+// tray and the geometry module's rejection shows here as an inline message.
+function SocketTrayPocketCard({
+  shape,
+  workspace,
+  disabled,
+  onUpdate,
+  onInteractionActiveChange,
+}: {
+  shape: WorkplaneShape;
+  workspace: WorkplaneWorkspaceSettings;
+  disabled?: boolean;
+  onUpdate: ShapeInspectorUpdate;
+  onInteractionActiveChange?: (active: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const pockets = shape.socketTrayPockets ?? [];
+  const trayWidth = shapeWidth(shape);
+  const trayDepth = shapeDepth(shape);
+  const layoutError = socketTrayLayoutError(shape);
+  const setPockets = (next: NonNullable<WorkplaneShape["socketTrayPockets"]>) => onUpdate({ socketTrayPockets: next });
+  const addPocket = () => {
+    const last = pockets[pockets.length - 1];
+    setPockets([...pockets, { diameter: 20, x: last ? last.x + 36 : 30, z: trayDepth / 2 }]);
+  };
+  return (
+    <div className={`property-card ${open ? "" : "collapsed"}`}>
+      <button
+        className="property-card-header"
+        type="button"
+        aria-expanded={open}
+        aria-controls={`socket-tray-pockets-${shape.id}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>Pockets</span>
+        <ChevronUp className={open ? "" : "collapsed"} size={25} strokeWidth={2.8} />
+      </button>
+      {open ? (
+        <div className="property-list" id={`socket-tray-pockets-${shape.id}`}>
+          {pockets.map((pocket, index) => (
+            <div key={index}>
+              <RangeProperty
+                label={`Pocket ${index + 1} Diameter`}
+                value={pocket.diameter}
+                min={2}
+                max={60}
+                step={0.1}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(diameter) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, diameter } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Pocket ${index + 1} X`}
+                value={pocket.x}
+                min={0}
+                max={trayWidth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(x) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, x } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Pocket ${index + 1} Z`}
+                value={pocket.z}
+                min={0}
+                max={trayDepth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(z) => setPockets(pockets.map((entry, i) => (i === index ? { ...entry, z } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setPockets(pockets.filter((_, i) => i !== index))}>
+                <span>Remove Pocket {index + 1}</span>
+              </button>
+            </div>
+          ))}
+          {layoutError ? (
+            <p role="alert" style={{ color: "#e0524d", margin: "4px 2px", fontSize: "0.86em", lineHeight: 1.35 }}>
+              {layoutError}
+            </p>
+          ) : null}
+          <button className="inspector-action-button" type="button" disabled={disabled} onClick={addPocket}>
+            <span>Add Pocket</span>
           </button>
         </div>
       ) : null}

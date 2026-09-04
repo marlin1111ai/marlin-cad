@@ -26,8 +26,17 @@ import {
   type MulticonnectPlateOptions,
 } from "@/lib/multiconnectContainerGeometry";
 import { MULTICONNECT_PRESETS, multiconnectPresetById } from "@/lib/multiconnectPresets";
+import {
+  createSocketTrayGeometry,
+  MIN_SOCKET_TRAY_FLOOR_THICKNESS,
+  SOCKET_TRAY_POCKET_EDGE_CLEARANCE,
+  SOCKET_TRAY_POCKET_GAP,
+  socketTrayDimensions,
+  socketTrayPositions,
+  type SocketTrayOptions,
+} from "@/lib/socketTrayGeometry";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
-import type { ShapeAsset, WorkplaneShape } from "@/types/sketchforge";
+import type { ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
 
@@ -65,6 +74,10 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // (multiconnectShapeType) switched via the inspector panel, one catalog
   // entry, matching the container/board/snap pattern above.
   { id: "multiconnect-container", name: "Multiconnect Container", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "multiconnectContainer", color: "#9b3bd2", category: OPENGRID_CATEGORY },
+  // Socket Tray: same box-icon stand-in, one catalog entry in the OpenGrid
+  // section next to the Multiconnect Container; the pocket list is edited in
+  // the inspector (SocketTrayPocketCard), like the PegPlate's peg list.
+  { id: "socket-tray", name: "Socket Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "socketTray", color: "#3b82f6", category: OPENGRID_CATEGORY },
   // Built-in parts library (multiconnectPresets.ts): each preset is a normal
   // multiconnectContainer entry whose presetId makes makeShapeFromAsset
   // pre-fill the inserted shape. Presets group under their own labeled
@@ -89,6 +102,73 @@ export const DEFAULT_MULTICONNECT_SHAPE_HEIGHT = 60;
 export const DEFAULT_MULTICONNECT_SHAPE_THICKNESS = 10;
 export const DEFAULT_MULTICONNECT_SHAPE_CORNER_RADIUS = 5;
 export const DEFAULT_MULTICONNECT_PEG_LENGTH = 45;
+
+// Insert defaults for the Socket Tray: the 6-pocket sampler coupon from
+// reference/socket-tray-sampler-report.md verbatim. Tray 240 x 60 x 18 comes
+// from the module's own defaults (socketTrayDimensions); pocket depth 14mm
+// over a 4mm floor; diameters are measured socket OD + 2mm clearance at 36mm
+// pitch with 30mm margins on the z=30 centerline.
+export const DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH = 14;
+export const DEFAULT_SOCKET_TRAY_SHAPE_POCKETS: ReadonlyArray<SocketTrayShapePocket> = [
+  { diameter: 14, x: 30, z: 30 },
+  { diameter: 15, x: 66, z: 30 },
+  { diameter: 19, x: 102, z: 30 },
+  { diameter: 20.7, x: 138, z: 30 },
+  { diameter: 23, x: 174, z: 30 },
+  { diameter: 25, x: 210, z: 30 },
+];
+
+// The single shape -> geometry-options mapping for the Socket Tray: the
+// viewport arm, the editor's export arm, and the inspector's validation all
+// go through this. Tray width -> shape.width, tray depth -> shape.depth, tray
+// thickness -> shape.height (the app's Y-up dimension, matching the module's
+// Y = thickness frame). The shared socketTrayPocketDepth is applied to every
+// pocket; the module takes depth per pocket but the UI does not expose that.
+export function socketTrayOptionsForShape(shape: WorkplaneShape): SocketTrayOptions {
+  const pocketDepth = shape.socketTrayPocketDepth ?? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH;
+  return {
+    width: shapeWidth(shape),
+    depth: shapeDepth(shape),
+    thickness: shape.height,
+    pockets: (shape.socketTrayPockets ?? []).map((pocket) => ({ diameter: pocket.diameter, depth: pocketDepth, x: pocket.x, z: pocket.z })),
+  };
+}
+
+// The geometry module THROWS on an invalid pocket layout (its callers are
+// expected to validate). The render/export arms must never crash on a
+// half-edited layout, so they fall back to the bare tray (no pockets); the
+// inspector shows the validation message inline instead (socketTrayLayoutError).
+export function createSocketTrayGeometryForShape(shape: WorkplaneShape) {
+  const options = socketTrayOptionsForShape(shape);
+  try {
+    return createSocketTrayGeometry(options);
+  } catch {
+    return createSocketTrayGeometry({ ...options, pockets: [] });
+  }
+}
+
+// Friendly inline message for the inspector: null when the pocket layout is
+// valid, otherwise the geometry module's rejection translated to 1-based
+// pocket numbers and plain language.
+export function socketTrayLayoutError(shape: WorkplaneShape): string | null {
+  const options = socketTrayOptionsForShape(shape);
+  if (!options.pockets?.length) return null;
+  try {
+    socketTrayPositions(options);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const overlap = message.match(/pockets (\d+) and (\d+): footprints overlap/);
+    if (overlap) return `Pockets ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${SOCKET_TRAY_POCKET_GAP}mm between them.`;
+    const edge = message.match(/pocket (\d+): footprint .* edge/);
+    if (edge) return `Pocket ${Number(edge[1]) + 1} is too close to the tray edge (${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm clearance is required).`;
+    const floor = message.match(/pocket (\d+): depth .* floor/);
+    if (floor) return `Pocket Depth leaves less than the ${MIN_SOCKET_TRAY_FLOOR_THICKNESS}mm minimum floor — reduce Pocket Depth or increase Thickness.`;
+    const invalid = message.match(/pocket (\d+): diameter/);
+    if (invalid) return `Pocket ${Number(invalid[1]) + 1} has invalid values.`;
+    return message;
+  }
+}
 
 // The single shape -> geometry-options mapping for the Multiconnect
 // Container: the viewport arm, the editor's export arm, and the inspector's
@@ -243,10 +323,13 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
         depth: DEFAULT_MULTICONNECT_SHAPE_THICKNESS,
       }
     : undefined;
+  // Socket Tray: width/depth/thickness straight from the module's defaults;
+  // thickness is the Y-up dimension, so it becomes shape.height.
+  const socketTrayDefaults = asset.kind === "socketTray" ? socketTrayDimensions({}) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : asset.kind === "text" ? 28 : size;
 
   const shape: WorkplaneShape = {
     id: createLocalId(asset.id),
@@ -309,6 +392,8 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     multiconnectPegTilt: asset.kind === "multiconnectContainer" ? DEFAULT_MULTICONNECT_PEG_TILT_DEG : undefined,
     multiconnectPegRowZ: asset.kind === "multiconnectContainer" ? Math.round(DEFAULT_MULTICONNECT_SHAPE_HEIGHT / 2) : undefined,
     multiconnectPegs: asset.kind === "multiconnectContainer" ? [] : undefined,
+    socketTrayPocketDepth: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH : undefined,
+    socketTrayPockets: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
     locked: false,
     hidden: false,
   };

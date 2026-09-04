@@ -21,7 +21,8 @@ export type ShapeKind =
   | "openGridBoard"
   | "openConnectContainer"
   | "openGridSnap"
-  | "multiconnectContainer";
+  | "multiconnectContainer"
+  | "socketTray";
 
 export type ShapeAsset = {
   id: string;
@@ -147,6 +148,13 @@ export type MulticonnectShapeType = "Plate" | "PegPlate";
 // shared across pegs (multiconnectPegLength / multiconnectPegRowZ).
 export type MulticonnectShapePeg = { diameter: number; x: number };
 
+// One pocket row in the inspector's Socket Tray pocket list. `x`/`z` are the
+// pocket center in the tray's own geometry space (x from the left edge, z
+// from the front edge). The tray lies flat, so there is no as-mounted
+// mirror -- see the world-frame note in socketTrayGeometry.ts. Pocket depth
+// is shared across pockets (socketTrayPocketDepth), not per row.
+export type SocketTrayShapePocket = { diameter: number; x: number; z: number };
+
 export type SketchRevolveSettings = {
   startAngle: number;
   sweepAngle: number;
@@ -271,6 +279,11 @@ export type WorkplaneShape = {
   multiconnectPegTilt?: number;
   multiconnectPegRowZ?: number;
   multiconnectPegs?: MulticonnectShapePeg[];
+  // Socket Tray (kind "socketTray"). Tray width / depth / thickness live in
+  // width / depth / height (thickness is the Y-up dimension); these hold the
+  // shared pocket depth and the pocket list.
+  socketTrayPocketDepth?: number;
+  socketTrayPockets?: SocketTrayShapePocket[];
   text?: string;
   font?: string;
   importedMesh?: {

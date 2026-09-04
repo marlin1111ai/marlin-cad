@@ -133,6 +133,7 @@ export function fallbackSolidColor(shape: WorkplaneShape) {
   if (shape.kind === "openConnectContainer") return "#2f9e6e";
   if (shape.kind === "openGridSnap") return "#c77b1f";
   if (shape.kind === "multiconnectContainer") return "#9b3bd2";
+  if (shape.kind === "socketTray") return "#3b82f6";
   return "#d41721";
 }
 
@@ -240,6 +241,8 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.multiconnectPegTilt === b.multiconnectPegTilt &&
     a.multiconnectPegRowZ === b.multiconnectPegRowZ &&
     a.multiconnectPegs === b.multiconnectPegs &&
+    a.socketTrayPocketDepth === b.socketTrayPocketDepth &&
+    a.socketTrayPockets === b.socketTrayPockets &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&
