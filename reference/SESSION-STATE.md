@@ -35,14 +35,35 @@ Where things stand right now.
   36mm pitch instead.
 - No back plate yet: the coupon is a standalone block. The OpenGrid Snap
   back-plate mount for the tray is not built.
+- Registered in the editor (`fe3e829`): a catalog entry in the OpenGrid
+  section of the insert menu, and an inspector with Width / Depth /
+  Thickness / Pocket Depth rows plus a per-pocket Diameter / X / Z list
+  (add / remove, inline module error). Follows the Multiconnect
+  registration pattern across the same eight files; neither geometry
+  module was edited. Owner-tested in the dev app and approved.
+- The default insert is the six-pocket coupon; exported through the real
+  STL writer it reproduces `test-prints/socket-tray-sampler.stl` triangle
+  for triangle (1,548 facets, identical bounding box, every vertex within
+  7.4e-6mm on the float32 path; only the solid name differs).
+- Registration tests: `tests/unit/socketTrayShapeRegistration.test.ts` —
+  7 tests (catalog entry, default insert, shape → options mapping, `.skf`
+  round-trip, geometry identity with the module, export reproduces the
+  coupon, invalid layouts give the friendly messages).
 - Status: unvalidated — the coupon has not been printed.
 - **Physical gate: print the 6-pocket coupon on the X1C and test all 12
   sockets (5–16mm) in it before any production tray is built.**
 - Full detail: `reference/socket-tray-recon.md`,
-  `reference/socket-tray-sampler-report.md`.
+  `reference/socket-tray-sampler-report.md`,
+  `reference/reports/socket-tray-ui-recon.md`,
+  `reference/reports/socket-tray-ui-build.md`.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Socket Tray registered in the editor: catalog entry, inspector, pocket
+  card, registration tests (`fe3e829`).
+- Read-only recon report for the Socket Tray UI registration (`1827a84`).
+- reference/ session docs brought current with the socket tray sampler
+  (`26d127b`, push verification recorded in `21ccf00`).
 - Socket Tray primitive, unit tests, generator script, and unvalidated
   sampler coupon added (`88c37a1`).
 - Socket Tray sampler pocket depth reduced to 14mm, tray thickness to 18mm
@@ -102,8 +123,9 @@ Where things stand right now.
 
 ## Test suite
 
-319 unit tests passing across 46 files (`npm test`, 2026-09-04), of which
-17 are in `tests/unit/socketTrayGeometry.test.ts`.
+326 unit tests passing across 47 files (`npm test`, 2026-09-04), of which
+17 are in `tests/unit/socketTrayGeometry.test.ts` and 7 in
+`tests/unit/socketTrayShapeRegistration.test.ts`.
 
 ## Printers
 
