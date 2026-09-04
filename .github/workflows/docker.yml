@@ -31,6 +31,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The image's version tag comes from the root package.json, the repo's
+      # only tracked package manifest. Unraid pins a version tag and never
+      # :latest (see reference/DECISIONS.md), so a release needs a tag it can
+      # pin to; bumping the version in package.json is what produces one.
+      - name: Read package version
+        id: package
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -40,6 +50,7 @@ jobs:
             type=ref,event=branch
             type=sha,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.package.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
