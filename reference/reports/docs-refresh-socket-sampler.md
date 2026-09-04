@@ -144,7 +144,28 @@ an owner layout decision, not a fix. Nothing qualified.
 
 ## Step 6 — commit and push
 
-Filled in below after the push (see "Push verification").
+```
+$ git commit ...
+26d127b Bring reference/ session docs current with the socket tray sampler
+
+$ git push origin main
+To github.com:marlin1111ai/marlin-cad.git
+   998b03a..26d127b  main -> main
+
+$ git fetch origin
+$ git rev-parse HEAD origin/main
+26d127b203254f07eb3936e80c2a4866b73c638d
+26d127b203254f07eb3936e80c2a4866b73c638d
+
+$ git status -sb | head -1
+## main...origin/main
+```
+
+HEAD and origin/main match at `26d127b`. The push moved the remote from
+`998b03a` to `26d127b`, carrying the five socket commits plus the doc
+commit. This verification block was added to the report in a follow-up
+docs-only commit on top of `26d127b`, since a report cannot contain its own
+commit's push result.
 
 ## Open questions
 
