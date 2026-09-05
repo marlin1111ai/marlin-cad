@@ -49,9 +49,20 @@ Where things stand right now.
   for triangle (1,548 facets, identical bounding box, every vertex within
   7.4e-6mm on the float32 path; only the solid name differs).
 - Registration tests: `tests/unit/socketTrayShapeRegistration.test.ts` —
-  7 tests (catalog entry, default insert, shape → options mapping, `.skf`
+  8 tests (catalog entry, default insert, shape → options mapping, `.skf`
   round-trip, geometry identity with the module, export reproduces the
   coupon, invalid layouts give the friendly messages).
+- **Corner Radius rounding added (`4be03de`):** an owner-typed Corner
+  Radius field (default 0) rounds the tray's own outer top edges (the
+  full top perimeter) and every pocket rim, using a mitered quarter-arc
+  technique matching the Multiconnect peg fillet (extra profile points
+  inserted along a quarter-circle arc; no CSG). Radius 0 is byte-identical
+  to the prior unrounded output, verified by a byte-for-byte diff against
+  the committed `test-prints/socket-tray-sampler.stl`. A new demo export,
+  `test-prints/socket-tray-sampler-rounded-demo.stl` (cornerRadius 3mm),
+  was added alongside the original coupon as a NEW file, not a replacement.
+  Full detail: `reference/reports/socket-tray-rounding-recon.md`,
+  `reference/reports/socket-tray-rounding-build.md`.
 - Status: unvalidated — the coupon has not been printed.
 - **Physical gate: print the 6-pocket coupon on the X1C and test all 12
   sockets (5–16mm) in it before any production tray is built.**
@@ -107,6 +118,22 @@ and remains the test piece.
   maps to the app's X, plate height to its Y-up height, and `shape.depth`
   holds the solid's full Z extent so the selection frame matches the mesh.
   Owner-tested in the dev app and approved.
+- **Corner Radius rounding added (`4be03de`):** the same owner-typed Corner
+  Radius field (default 0) as the flat tray, rounding the plate's own
+  outer top edge (top-front) and the tray's own outer top edge (top-front),
+  plus every pocket rim, via the same mitered quarter-arc technique matching
+  the Multiconnect peg fillet — no CSG. **The plate-to-tray L-junction is
+  deliberately excluded from rounding and stays sharp**, as are the plate's
+  bottom edges and the edge where the plate top meets the mounting face.
+  Radius 0 is byte-identical to the prior unrounded output, verified by a
+  byte-for-byte diff against the committed
+  `test-prints/mounted-socket-tray-coupon.stl` (this check caught and led to
+  fixing a triangle-emission-order bug in the first draft — see
+  KNOWN-FIXES.md). A new demo export,
+  `test-prints/mounted-socket-tray-coupon-rounded-demo.stl` (cornerRadius
+  3mm), was added alongside the original coupon as a NEW file, not a
+  replacement. Full detail: `reference/reports/socket-tray-rounding-recon.md`,
+  `reference/reports/socket-tray-rounding-build.md`.
 - Status: **unvalidated — the coupon has not been printed.**
 - Full detail: `reference/reports/socket-tray-mounted-recon.md`,
   `reference/reports/mounted-socket-tray-build.md`.
@@ -116,10 +143,20 @@ and remains the test piece.
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
 `test-prints/mounted-socket-tray-coupon.stl` (mounted, 3 pockets) has been
 printed. **No production tray is built until both are printed and
-hand-verified.**
+hand-verified.** Both files stay frozen at Corner Radius 0 (sharp);
+rounding changes the mesh, so any future production or demo print at a
+chosen Corner Radius is a NEW coupon printed and hand-verified on its own
+terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Owner-typed Corner Radius fillet added to both Socket Trays: rounds the
+  tray's own outer top edges and every pocket rim via a mitered quarter-arc
+  technique matching the Multiconnect peg fillet, no CSG; radius 0 (default)
+  is byte-identical to the pre-rounding output on both existing coupons; the
+  Mounted Socket Tray's plate-to-tray L-junction is excluded and stays
+  sharp; two new demo STLs added alongside (not replacing) the frozen
+  coupons. Owner-tested and approved (`4be03de`).
 - Docker workflow tags images with the `package.json` version on every push
   to `main`, in addition to `main` / `sha` / `latest`; version bumped to
   `1.1.0` (`2c3767d`).
@@ -231,10 +268,10 @@ succeeded and published `1.1.0`. Full detail:
 
 ## Test suite
 
-378 unit tests passing across 49 files (`npm test`, 2026-09-04), of which
-17 are in `tests/unit/socketTrayGeometry.test.ts`, 7 in
-`tests/unit/socketTrayShapeRegistration.test.ts`, 40 in
-`tests/unit/mountedSocketTrayGeometry.test.ts` and 12 in
+415 unit tests passing across 49 files (`npm test`, 2026-09-04), of which
+36 are in `tests/unit/socketTrayGeometry.test.ts`, 8 in
+`tests/unit/socketTrayShapeRegistration.test.ts`, 56 in
+`tests/unit/mountedSocketTrayGeometry.test.ts` and 13 in
 `tests/unit/mountedSocketTrayShapeRegistration.test.ts`.
 
 ## Printers
