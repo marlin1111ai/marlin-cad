@@ -293,6 +293,9 @@ export type WorkplaneShape = {
   // shared pocket depth and the pocket list.
   socketTrayPocketDepth?: number;
   socketTrayPockets?: SocketTrayShapePocket[];
+  // Owner-typed fillet radius, applied to the tray's outer top perimeter and
+  // every pocket rim. 0 (default) = sharp.
+  socketTrayCornerRadius?: number;
   // Mounted Socket Tray (kind "mountedSocketTray"). Plate width / plate height
   // live in width / height (height is the Y-up dimension); depth holds the
   // solid's full Z extent, i.e. tray projection + plate thickness, so the
@@ -304,6 +307,10 @@ export type WorkplaneShape = {
   mountedTrayThickness?: number;
   mountedTrayPocketDepth?: number;
   mountedTrayPockets?: MountedSocketTrayShapePocket[];
+  // Owner-typed fillet radius, applied to the plate's own top edge, the
+  // tray's own top edge, and every pocket rim. 0 (default) = sharp. Never
+  // applied to the L-junction.
+  mountedTrayCornerRadius?: number;
   text?: string;
   font?: string;
   importedMesh?: {

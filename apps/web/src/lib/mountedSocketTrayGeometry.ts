@@ -18,6 +18,7 @@ import {
 } from "@/lib/multiconnectContainerGeometry";
 import {
   MIN_SOCKET_TRAY_FLOOR_THICKNESS,
+  SOCKET_TRAY_FILLET_SEGMENTS,
   SOCKET_TRAY_POCKET_EDGE_CLEARANCE,
   SOCKET_TRAY_POCKET_GAP,
   SOCKET_TRAY_POCKET_SEGMENTS,
@@ -104,6 +105,38 @@ import {
 // NOT mirrored. The mirror on the PegPlate exists because pegs address a front
 // face viewed from the wall side; pockets here open UPWARD on a horizontal
 // shelf, so x runs the same direction the viewport shows it.
+//
+// ===== CORNER RADIUS (fillet), AND WHY THE L-JUNCTION (POINT E) IS EXCLUDED =====
+//
+// Same owner-typed fillet as the flat tray, same technique (an extra ring
+// of points inserted along a quarter-circle arc at each rounded edge, using
+// SOCKET_TRAY_FILLET_SEGMENTS imported from socketTrayGeometry.ts -- read,
+// never copy-pasted). Two edges of the L cross-section are rounded, each a
+// lengthwise edge swept the full plateWidth, using the SAME local
+// derivation both times (a +Y-outward horizontal face meeting a -Z-outward
+// vertical face, exactly the flat tray's own front-top-edge case):
+//
+// - Corner D (plate top meets plate front) -- the plate's own outer top
+//   edge, the "outer edges of ... the plate" the brief asks for.
+// - Corner F (tray top meets tray front) -- the tray's own outer top edge,
+//   directly analogous to the flat tray's full top perimeter, restricted
+//   here to the one edge that isn't the excluded junction or an end cap.
+//
+// Left sharp, deliberately:
+// - Corner E (the L-junction itself, where the tray top meets the plate
+//   front) -- explicitly out of scope per the owner's brief. Nothing about
+//   this fillet touches point E or either of its two adjacent edges' E-end.
+// - Corners A and B (the two bottom edges) -- mirrors the flat tray's own
+//   choice to leave its bottom edge sharp (flat-on-bed contact).
+// - Corner C (plate top meets the mounting face) -- left sharp to keep the
+//   mounting face's own edge exactly as validated; only its adjacent top
+//   face (edge 2) recedes near D, never near C.
+// - The two end-cap perimeters (X = 0, X = plateWidth) are NOT separately
+//   filleted where they meet the swept side faces -- rounding corners D and
+//   F is done by inserting the arc directly into the shared L outline, so
+//   the end caps automatically show the same rounded profile with no
+//   separate treatment, but no additional rounding wraps around to the
+//   left/right ends of the plate or tray.
 
 export const DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_WIDTH = 240;
 export const DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_HEIGHT = 60;
@@ -113,6 +146,7 @@ export const DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT = 8;
 export const DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH = 60;
 export const DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS = 18;
 export const DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH = 14;
+export const DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS = 0;
 
 export const MIN_MOUNTED_SOCKET_TRAY_SLOT_COUNT = 1;
 export const MAX_MOUNTED_SOCKET_TRAY_SLOT_COUNT = 20;
@@ -145,6 +179,11 @@ export type MountedSocketTrayOptions = {
   trayThickness?: number;
   // One depth for every pocket on the tray, not per pocket.
   pocketDepth?: number;
+  // Owner-typed fillet radius, applied to the plate's own top edge (corner
+  // D), the tray's own top edge (corner F), and every pocket rim. 0
+  // (default) = sharp, identical to pre-rounding output. Never applied to
+  // the L-junction (corner E) -- see the file header.
+  cornerRadius?: number;
   pockets?: MountedSocketTrayPocket[];
 };
 
@@ -190,6 +229,13 @@ export function normalizeMountedSocketTrayThickness(value?: number): number {
   const thickness = finiteOr(value, DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS);
   if (thickness <= 0) throw new Error(`mounted socket tray thickness must be positive (got ${thickness})`);
   return thickness;
+}
+
+// Zero or positive only -- 0 (sharp) is the default, valid state.
+export function normalizeMountedSocketTrayCornerRadius(value?: number): number {
+  const radius = finiteOr(value, DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS);
+  if (radius < 0) throw new Error(`mounted socket tray corner radius must be zero or positive (got ${radius})`);
+  return radius;
 }
 
 // Slot run centered on the plate. With an explicit count this reduces to
@@ -395,6 +441,69 @@ function pushQuad(out: number[], corners: [Point3, Point3, Point3, Point3], desi
 
 const POCKET_ANGLES = Array.from({ length: SOCKET_TRAY_POCKET_SEGMENTS }, (_, index) => (2 * Math.PI * index) / SOCKET_TRAY_POCKET_SEGMENTS);
 
+// theta runs [pi/2, pi] for every fillet in this file, same convention as
+// socketTrayGeometry.ts's own filletTheta (reimplemented here, not
+// imported -- this file already reimplements pushTriangle/triangleNormal/
+// pushCap/pushQuad rather than sharing them). Only ever called for interior
+// points (k = 1..segments-1); k = 0 and k = segments are hand-written
+// literals wherever this is used, per CLAUDE-LESSONS.md's exact-stitch
+// entry (trig does not land exactly on an arc endpoint).
+function filletTheta(k: number, segments: number): number {
+  return Math.PI / 2 + (k * (Math.PI / 2)) / segments;
+}
+
+// Validates the fillet against the plate/tray geometry it's swept into
+// (corner D needs room along both the plate-top and plate-front edges
+// before it would reach C or E; corner F needs room along both the
+// tray-top and tray-front edges before it would reach E or A) and, per
+// pocket, against pocket depth and the same widened-footprint clearance
+// checks as the flat tray's own guard.
+function validateMountedSocketTrayCornerRadius(
+  cornerRadius: number,
+  plateHeight: number,
+  plateThickness: number,
+  trayThickness: number,
+  trayDepth: number,
+  plateWidth: number,
+  pockets: NormalizedPocket[],
+  pocketDepth: number,
+) {
+  if (cornerRadius === 0) return;
+  const cornerDRoom = Math.min(plateThickness, plateHeight - trayThickness);
+  if (cornerRadius >= cornerDRoom) {
+    throw new Error(`mounted socket tray corner radius ${cornerRadius}mm is too large for the plate's own top edge (${cornerDRoom}mm of room before it reaches the mounting face or the tray junction)`);
+  }
+  const cornerFRoom = Math.min(trayDepth, trayThickness);
+  if (cornerRadius >= cornerFRoom) {
+    throw new Error(`mounted socket tray corner radius ${cornerRadius}mm is too large for the tray's own top edge (${cornerFRoom}mm of room before it reaches the plate junction or the tray bottom)`);
+  }
+  pockets.forEach((pocket, index) => {
+    if (cornerRadius >= pocketDepth) {
+      throw new Error(`mounted socket tray corner radius ${cornerRadius}mm leaves no straight wall below it in pocket ${index} (depth ${pocketDepth}mm)`);
+    }
+    const widened = pocket.radius + cornerRadius;
+    if (
+      pocket.x - widened < SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
+      pocket.x + widened > plateWidth - SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
+      pocket.z - widened < SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
+      pocket.z + widened > trayDepth - SOCKET_TRAY_POCKET_EDGE_CLEARANCE
+    ) {
+      throw new Error(
+        `mounted socket tray corner radius ${cornerRadius}mm widens pocket ${index} (diameter ${pocket.radius * 2}mm) to within ${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm of the tray edge`,
+      );
+    }
+    for (let j = 0; j < pockets.length; j += 1) {
+      if (j === index) continue;
+      const distance = Math.hypot(pocket.x - pockets[j].x, pocket.z - pockets[j].z);
+      if (distance < widened + pockets[j].radius + cornerRadius + SOCKET_TRAY_POCKET_GAP) {
+        throw new Error(
+          `mounted socket tray corner radius ${cornerRadius}mm widens pocket ${index} (diameter ${pocket.radius * 2}mm) too close to pocket ${j} (centers ${distance.toFixed(2)}mm apart)`,
+        );
+      }
+    }
+  });
+}
+
 // ===== main entry point =====
 
 export function mountedSocketTrayPositions(options: MountedSocketTrayOptions = {}): number[] {
@@ -406,6 +515,7 @@ export function mountedSocketTrayPositions(options: MountedSocketTrayOptions = {
   const trayDepth = normalizeMountedSocketTrayDepth(options.trayDepth);
   const trayThickness = normalizeMountedSocketTrayThickness(options.trayThickness);
   const pocketDepth = finiteOr(options.pocketDepth, DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH);
+  const cornerRadius = normalizeMountedSocketTrayCornerRadius(options.cornerRadius);
 
   // The tray occupies the bottom of the plate's front face, so it has to leave
   // some plate above it -- otherwise outline points D and E cross and the L
@@ -434,6 +544,7 @@ export function mountedSocketTrayPositions(options: MountedSocketTrayOptions = {
   }
 
   const pockets = normalizedPockets(options.pockets ?? [], plateWidth, trayDepth, trayThickness, pocketDepth);
+  validateMountedSocketTrayCornerRadius(cornerRadius, plateHeight, plateThickness, trayThickness, trayDepth, plateWidth, pockets, pocketDepth);
 
   // Z planes. All slot geometry is measured from the MOUNTING face, so extra
   // plate thickness goes entirely into the front skin: the blind floor moves
@@ -470,75 +581,204 @@ export function mountedSocketTrayPositions(options: MountedSocketTrayOptions = {
   // both the tray top cap's hole contour and the pocket wall's top ring, so
   // that seam is bit-identical by construction.
   const trayTopY = trayThickness;
+  const K = SOCKET_TRAY_FILLET_SEGMENTS;
   const pocketBuilds = pockets.map((pocket) => {
     const floorY = trayTopY - pocketDepth;
-    const rim: Point3[] = POCKET_ANGLES.map((angle) => [pocket.x + pocket.radius * Math.cos(angle), trayTopY, pocket.z + pocket.radius * Math.sin(angle)]);
     const floorRing: Point3[] = POCKET_ANGLES.map((angle) => [pocket.x + pocket.radius * Math.cos(angle), floorY, pocket.z + pocket.radius * Math.sin(angle)]);
-    return { floorY, rim, floorRing };
-  });
-  const pocketHoles: Point2[][] = pocketBuilds.map(({ rim }) => rim.map(([x, , z]) => [x, z]));
-
-  // ---- the two end caps: the L outline itself, at X = 0 and X = plateWidth.
-  pushCap(positions, outline, ([y, z]) => [0, y, z], [-1, 0, 0]);
-  pushCap(positions, outline, ([y, z]) => [plateWidth, y, z], [1, 0, 0]);
-
-  // ---- outline edge 0 (A->B): bottom face, Y = 0, with one keyhole notch per
-  // slot opening through its mounting-face edge. Traversed along
-  // Z = mountingFaceZ from x = plateWidth back to 0, diving around each channel
-  // cross-section (outline indices 3..0 then 7..4 -- everything except the open
-  // neck-top edge, which lies in the mounting face).
-  const notchOrder = [3, 2, 1, 0, 7, 6, 5, 4];
-  const bottomContour: Point2[] = [[outline[0][1], outline[0][0]], [plateWidth, 0], [plateWidth, outline[1][1]]];
-  for (const cx of [...centers].reverse()) {
-    for (const outlineIndex of notchOrder) {
-      const [across, depth] = MULTICONNECT_CHANNEL_OUTLINE[outlineIndex];
-      bottomContour.push([worldX(cx, across), worldZ(depth)]);
+    if (cornerRadius === 0) {
+      const rim: Point3[] = POCKET_ANGLES.map((angle) => [pocket.x + pocket.radius * Math.cos(angle), trayTopY, pocket.z + pocket.radius * Math.sin(angle)]);
+      return { floorY, rings: [rim], floorRing };
     }
-  }
-  bottomContour.push([0, outline[1][1]]);
-  pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
+    const rings: Point3[][] = [];
+    for (let k = 0; k <= K; k += 1) {
+      let radius: number;
+      let y: number;
+      if (k === 0) {
+        radius = pocket.radius + cornerRadius;
+        y = trayTopY;
+      } else if (k === K) {
+        radius = pocket.radius;
+        y = trayTopY - cornerRadius;
+      } else {
+        const theta = filletTheta(k, K);
+        radius = pocket.radius + cornerRadius * (1 + Math.cos(theta));
+        y = trayTopY - cornerRadius * (1 - Math.sin(theta));
+      }
+      rings.push(POCKET_ANGLES.map((angle) => [pocket.x + radius * Math.cos(angle), y, pocket.z + radius * Math.sin(angle)]));
+    }
+    return { floorY, rings, floorRing };
+  });
+  const pocketHoles: Point2[][] = pocketBuilds.map(({ rings }) => rings[0].map(([x, , z]) => [x, z]));
 
-  // ---- outline edge 1 (B->C): mounting face, Z = mountingFaceZ, with one
-  // notch per slot: straight strip sides matching the channel prism's neck
-  // walls, closed over the top by the baked mouth rim polyline (whose
-  // first/last points ARE the strip corners at the clip plane).
-  const mountingContour: Point2[] = [[0, 0]];
-  for (const cx of centers) {
-    const stripLeftX = worldX(cx, mouthRim[0][0]);
-    const stripRightX = worldX(cx, mouthRim[mouthRim.length - 1][0]);
-    mountingContour.push([stripLeftX, 0]);
-    for (const [across, slide] of mouthRim) mountingContour.push([worldX(cx, across), worldY(slide)]);
-    mountingContour.push([stripRightX, 0]);
-  }
-  mountingContour.push([plateWidth, 0], [plateWidth, outline[2][0]], [0, outline[2][0]]);
-  pushCap(positions, mountingContour, ([x, y]) => [x, y, mountingFaceZ], [0, 0, 1]);
+  // ---- outline edge 0 (A->B) and edge 1 (B->C): bottom face and mounting
+  // face. Unaffected by cornerRadius -- corners A, B, C are never rounded.
+  // Factored into a function (called at the ORIGINAL position, between the
+  // end caps and the tray-top face, in both branches below) purely to avoid
+  // duplicating this block; it changes nothing about what gets emitted or
+  // when, which is the point -- the radius===0 branch's emission ORDER, not
+  // just its topology, must match the pre-rounding module exactly.
+  const pushBottomAndMountingFaces = () => {
+    // Bottom face, Y = 0, with one keyhole notch per slot opening through
+    // its mounting-face edge. Traversed along Z = mountingFaceZ from
+    // x = plateWidth back to 0, diving around each channel cross-section
+    // (outline indices 3..0 then 7..4 -- everything except the open
+    // neck-top edge, which lies in the mounting face).
+    const notchOrder = [3, 2, 1, 0, 7, 6, 5, 4];
+    const bottomContour: Point2[] = [[outline[0][1], outline[0][0]], [plateWidth, 0], [plateWidth, outline[1][1]]];
+    for (const cx of [...centers].reverse()) {
+      for (const outlineIndex of notchOrder) {
+        const [across, depth] = MULTICONNECT_CHANNEL_OUTLINE[outlineIndex];
+        bottomContour.push([worldX(cx, across), worldZ(depth)]);
+      }
+    }
+    bottomContour.push([0, outline[1][1]]);
+    pushCap(positions, bottomContour, ([x, z]) => [x, 0, z], [0, -1, 0]);
 
-  // ---- outline edge 4 (E->F): tray top, Y = trayThickness, notched with each
-  // pocket's exact rim contour as an earcut hole. This is the ONLY face a
-  // pocket ever opens through, so "the floor stays solid" holds by
-  // construction -- nothing in this builder emits geometry between a pocket's
-  // floor and the tray's bottom face.
-  const trayTopContour: Point2[] = [[0, 0], [plateWidth, 0], [plateWidth, outline[4][1]], [0, outline[4][1]]];
-  pushCap(positions, trayTopContour, ([x, z]) => [x, trayTopY, z], [0, 1, 0], pocketHoles);
+    // Mounting face, Z = mountingFaceZ, with one notch per slot: straight
+    // strip sides matching the channel prism's neck walls, closed over the
+    // top by the baked mouth rim polyline (whose first/last points ARE the
+    // strip corners at the clip plane).
+    const mountingContour: Point2[] = [[0, 0]];
+    for (const cx of centers) {
+      const stripLeftX = worldX(cx, mouthRim[0][0]);
+      const stripRightX = worldX(cx, mouthRim[mouthRim.length - 1][0]);
+      mountingContour.push([stripLeftX, 0]);
+      for (const [across, slide] of mouthRim) mountingContour.push([worldX(cx, across), worldY(slide)]);
+      mountingContour.push([stripRightX, 0]);
+    }
+    mountingContour.push([plateWidth, 0], [plateWidth, outline[2][0]], [0, outline[2][0]]);
+    pushCap(positions, mountingContour, ([x, y]) => [x, y, mountingFaceZ], [0, 0, 1]);
+  };
 
-  // ---- outline edges 2, 3, 5: plain rectangles, read straight out of the
-  // shared outline so their corners are the same doubles the end caps used.
-  for (const edge of [2, 3, 5]) {
-    const p = outline[edge];
-    const q = outline[(edge + 1) % outline.length];
-    // Outward direction for a CCW outline in (z, y): the edge direction
-    // rotated -90 degrees.
-    const outward: Point3 = [0, -(q[1] - p[1]), q[0] - p[0]];
-    pushQuad(
-      positions,
-      [
-        [0, p[0], p[1]],
-        [plateWidth, p[0], p[1]],
-        [plateWidth, q[0], q[1]],
-        [0, q[0], q[1]],
-      ],
-      outward,
-    );
+  if (cornerRadius === 0) {
+    // ===== original, unrounded construction -- verbatim (same emission
+    // ORDER as the pre-rounding module, not just the same topology) =====
+
+    // ---- the two end caps: the L outline itself, at X = 0 and X = plateWidth.
+    pushCap(positions, outline, ([y, z]) => [0, y, z], [-1, 0, 0]);
+    pushCap(positions, outline, ([y, z]) => [plateWidth, y, z], [1, 0, 0]);
+
+    pushBottomAndMountingFaces();
+
+    // ---- outline edge 4 (E->F): tray top, Y = trayThickness, notched with each
+    // pocket's exact rim contour as an earcut hole. This is the ONLY face a
+    // pocket ever opens through, so "the floor stays solid" holds by
+    // construction -- nothing in this builder emits geometry between a pocket's
+    // floor and the tray's bottom face.
+    const trayTopContour: Point2[] = [[0, 0], [plateWidth, 0], [plateWidth, outline[4][1]], [0, outline[4][1]]];
+    pushCap(positions, trayTopContour, ([x, z]) => [x, trayTopY, z], [0, 1, 0], pocketHoles);
+
+    // ---- outline edges 2, 3, 5: plain rectangles, read straight out of the
+    // shared outline so their corners are the same doubles the end caps used.
+    for (const edge of [2, 3, 5]) {
+      const p = outline[edge];
+      const q = outline[(edge + 1) % outline.length];
+      // Outward direction for a CCW outline in (z, y): the edge direction
+      // rotated -90 degrees.
+      const outward: Point3 = [0, -(q[1] - p[1]), q[0] - p[0]];
+      pushQuad(
+        positions,
+        [
+          [0, p[0], p[1]],
+          [plateWidth, p[0], p[1]],
+          [plateWidth, q[0], q[1]],
+          [0, q[0], q[1]],
+        ],
+        outward,
+      );
+    }
+  } else {
+    // ===== rounded corners D and F =====
+    //
+    // Both use the SAME local derivation as the flat tray's own top-edge
+    // fillet: a horizontal face (outward +Y) meets a vertical face (outward
+    // -Z), theta running pi/2 (flush with the horizontal face, at the
+    // sharp corner's Y) to pi (flush with the vertical face, at the sharp
+    // corner's Z). ringD(k)/ringF(k) return the (y, z) of the k-th point,
+    // walked in outline order (increasing k moves AWAY from the sharp
+    // corner along the horizontal face first, through the arc, to the
+    // vertical face) so they read directly into the outline in place of a
+    // single sharp point.
+    const ringD = (k: number): Point2 => {
+      if (k === 0) return [plateHeight, plateFrontZ + cornerRadius];
+      if (k === K) return [plateHeight - cornerRadius, plateFrontZ];
+      const theta = filletTheta(k, K);
+      return [plateHeight - cornerRadius * (1 - Math.sin(theta)), plateFrontZ + cornerRadius * (1 + Math.cos(theta))];
+    };
+    const ringF = (k: number): Point2 => {
+      if (k === 0) return [trayTopY, cornerRadius];
+      if (k === K) return [trayTopY - cornerRadius, 0];
+      const theta = filletTheta(k, K);
+      return [trayTopY - cornerRadius * (1 - Math.sin(theta)), cornerRadius * (1 + Math.cos(theta))];
+    };
+    // Desired normal per band -- both fillets share the same "horizontal
+    // face outward +Y, vertical face outward -Z" local frame, so the
+    // formula is identical: normal3D = (0, sin(thetaMid), cos(thetaMid)).
+    const filletDesiredNormal = (k: number): Point3 => {
+      const thetaMid = filletTheta(k + 0.5, K);
+      return [0, Math.sin(thetaMid), Math.cos(thetaMid)];
+    };
+
+    const filletedOutline: Point2[] = [
+      outline[0], // A
+      outline[1], // B
+      outline[2], // C
+      ...Array.from({ length: K + 1 }, (_, k) => ringD(k)),
+      outline[4], // E, unchanged -- the excluded junction
+      ...Array.from({ length: K + 1 }, (_, k) => ringF(k)),
+    ];
+
+    // ---- the two end caps: the filleted L outline, at X = 0 and X = plateWidth.
+    pushCap(positions, filletedOutline, ([y, z]) => [0, y, z], [-1, 0, 0]);
+    pushCap(positions, filletedOutline, ([y, z]) => [plateWidth, y, z], [1, 0, 0]);
+
+    pushBottomAndMountingFaces();
+
+    // ---- outline edge 4 (E->F): tray top, trimmed at its F end so its own
+    // front edge stops cornerRadius short of Z = 0 -- the corner-F fillet
+    // band fills the rest. Unaffected at the E end (the excluded junction).
+    const trayTopContour: Point2[] = [[0, cornerRadius], [plateWidth, cornerRadius], [plateWidth, outline[4][1]], [0, outline[4][1]]];
+    pushCap(positions, trayTopContour, ([x, z]) => [x, trayTopY, z], [0, 1, 0], pocketHoles);
+
+    // ---- outline edges 2, 3, 5: plain rectangles, each trimmed only at the
+    // end that touches a rounded corner (D or F); untouched at C, E, A.
+    const trimmedEdges: [Point2, Point2][] = [
+      [outline[2], ringD(0)], // edge 2 (C->D): trimmed at the D end
+      [ringD(K), outline[4]], // edge 3 (D->E): trimmed at the D end
+      [ringF(K), outline[0]], // edge 5 (F->A): trimmed at the F end
+    ];
+    for (const [p, q] of trimmedEdges) {
+      const outward: Point3 = [0, -(q[1] - p[1]), q[0] - p[0]];
+      pushQuad(
+        positions,
+        [
+          [0, p[0], p[1]],
+          [plateWidth, p[0], p[1]],
+          [plateWidth, q[0], q[1]],
+          [0, q[0], q[1]],
+        ],
+        outward,
+      );
+    }
+
+    // ---- the two fillet bands themselves, K quad-bands each, extruded the
+    // full plateWidth.
+    for (const ring of [ringD, ringF]) {
+      for (let k = 0; k < K; k += 1) {
+        const [pY, pZ] = ring(k);
+        const [qY, qZ] = ring(k + 1);
+        pushQuad(
+          positions,
+          [
+            [0, pY, pZ],
+            [plateWidth, pY, pZ],
+            [plateWidth, qY, qZ],
+            [0, qY, qZ],
+          ],
+          filletDesiredNormal(k),
+        );
+      }
+    }
   }
 
   // ---- per-slot interior surfaces.
@@ -583,27 +823,36 @@ export function mountedSocketTrayPositions(options: MountedSocketTrayOptions = {
     }
   }
 
-  // ---- per-pocket interior: cylindrical wall (top rim down to floor ring)
-  // plus the flat floor cap, reusing rim/floorRing verbatim.
-  for (const { floorY, rim, floorRing } of pocketBuilds) {
+  // ---- per-pocket interior. With cornerRadius === 0, `rings` holds only
+  // the original rim, reducing this to exactly the unrounded wall+floor
+  // construction; with cornerRadius > 0 it also emits the K extra fillet
+  // bands between the widened top ring and the ordinary wall-top ring,
+  // same technique as the flat tray's own pocket rim.
+  for (const { floorY, rings, floorRing } of pocketBuilds) {
     const segments = SOCKET_TRAY_POCKET_SEGMENTS;
+    if (cornerRadius > 0) {
+      for (let k = 0; k < K; k += 1) {
+        const ringA = rings[k];
+        const ringB = rings[k + 1];
+        const thetaMid = filletTheta(k + 0.5, K);
+        for (let i = 0; i < segments; i += 1) {
+          const j = (i + 1) % segments;
+          const midAngle = (2 * Math.PI * (i + 0.5)) / segments;
+          const desired: Point3 = [Math.cos(thetaMid) * Math.cos(midAngle), Math.sin(thetaMid), Math.cos(thetaMid) * Math.sin(midAngle)];
+          pushQuad(positions, [ringA[i], ringA[j], ringB[j], ringB[i]], desired);
+        }
+      }
+    }
+    const wallTopRing = rings[rings.length - 1];
     for (let i = 0; i < segments; i += 1) {
       const j = (i + 1) % segments;
-      const p0 = rim[i];
-      const p1 = rim[j];
+      const p0 = wallTopRing[i];
+      const p1 = wallTopRing[j];
       const p2 = floorRing[j];
       const p3 = floorRing[i];
       const midAngle = (2 * Math.PI * (i + 0.5)) / segments;
       const inward: Point3 = [-Math.cos(midAngle), 0, -Math.sin(midAngle)];
-      const normal = triangleNormal(p0, p1, p2);
-      const dot = normal[0] * inward[0] + normal[1] * inward[1] + normal[2] * inward[2];
-      if (dot < 0) {
-        pushTriangle(positions, p0, p2, p1);
-        pushTriangle(positions, p0, p3, p2);
-      } else {
-        pushTriangle(positions, p0, p1, p2);
-        pushTriangle(positions, p0, p2, p3);
-      }
+      pushQuad(positions, [p0, p1, p2, p3], inward);
     }
     // Floor cap: the pocket's blind bottom, normal pointing up into the cavity
     // (away from the solid material below it, toward the socket).

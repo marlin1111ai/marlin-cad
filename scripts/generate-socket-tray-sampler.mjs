@@ -5,6 +5,12 @@
 //
 //   node --experimental-strip-types scripts/generate-socket-tray-sampler.mjs
 //
+// Optional args: [cornerRadius] [outputPath]. With no args this reproduces
+// the exact committed coupon (cornerRadius 0, the same OUT_PATH) -- adding
+// these two optional args changes nothing about the default invocation. Used
+// to generate a separate, differently-named demo export at a nonzero radius
+// without touching the coupon itself.
+//
 // Pulls geometry from the real primitive module
 // (apps/web/src/lib/socketTrayGeometry.ts) rather than reimplementing it, so
 // the exported STL is exactly what the primitive produces -- same pattern as
@@ -20,7 +26,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { socketTrayPositions } from "../apps/web/src/lib/socketTrayGeometry.ts";
 
-const OUT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "socket-tray-sampler.stl");
+const cornerRadius = process.argv[2] !== undefined ? Number(process.argv[2]) : 0;
+const OUT_PATH = process.argv[3] ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "socket-tray-sampler.stl");
 
 // Same 6 pockets as SAMPLER_POCKETS in tests/unit/socketTrayGeometry.test.ts
 // -- keep both in sync if these numbers change. Pocket depth 14mm + 4mm
@@ -48,7 +55,7 @@ const POCKETS = [
   { diameter: 25, depth: 14, x: 210, z: 30 },
 ];
 
-const positions = socketTrayPositions({ width: 240, depth: 60, thickness: 18, pockets: POCKETS });
+const positions = socketTrayPositions({ width: 240, depth: 60, thickness: 18, cornerRadius, pockets: POCKETS });
 
 function sketchForgeToZUp([x, y, z]) {
   return [x, -z, y];

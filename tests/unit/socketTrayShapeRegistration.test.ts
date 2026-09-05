@@ -144,24 +144,26 @@ describe("socket tray registration", () => {
     expect(socketTrayLayoutError(placed)).toBeNull();
   });
 
-  it("maps shape fields to the module's options (width/depth -> width/depth, height -> thickness, shared pocket depth)", () => {
-    const options = socketTrayOptionsForShape(trayShape({ width: 200, depth: 50, height: 20, socketTrayPocketDepth: 12, socketTrayPockets: [{ diameter: 16, x: 40, z: 25 }, { diameter: 22, x: 90, z: 25 }] }));
+  it("maps shape fields to the module's options (width/depth -> width/depth, height -> thickness, shared pocket depth, corner radius passes through)", () => {
+    const options = socketTrayOptionsForShape(trayShape({ width: 200, depth: 50, height: 20, socketTrayPocketDepth: 12, socketTrayCornerRadius: 3, socketTrayPockets: [{ diameter: 16, x: 40, z: 25 }, { diameter: 22, x: 90, z: 25 }] }));
     expect(options).toEqual({
       width: 200,
       depth: 50,
       thickness: 20,
+      cornerRadius: 3,
       pockets: [
         { diameter: 16, depth: 12, x: 40, z: 25 },
         { diameter: 22, depth: 12, x: 90, z: 25 },
       ],
     });
-    // Missing pocket depth falls back to the insert default; no pockets -> [].
-    expect(socketTrayOptionsForShape(trayShape({ socketTrayPocketDepth: undefined, socketTrayPockets: undefined }))).toEqual({ width: 240, depth: 60, thickness: 18, pockets: [] });
+    // Missing pocket depth falls back to the insert default; no pockets -> [];
+    // the default insert's corner radius is 0 (sharp).
+    expect(socketTrayOptionsForShape(trayShape({ socketTrayPocketDepth: undefined, socketTrayPockets: undefined }))).toEqual({ width: 240, depth: 60, thickness: 18, cornerRadius: 0, pockets: [] });
     expect(DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH).toBe(14);
   });
 
-  it("round-trips through .skf persistence with the pocket list intact", async () => {
-    const original = trayShape({ socketTrayPocketDepth: 12, socketTrayPockets: [{ diameter: 16, x: 40, z: 25 }, { diameter: 22.5, x: 90, z: 35 }] });
+  it("round-trips through .skf persistence with the pocket list and corner radius intact", async () => {
+    const original = trayShape({ socketTrayPocketDepth: 12, socketTrayCornerRadius: 4, socketTrayPockets: [{ diameter: 16, x: 40, z: 25 }, { diameter: 22.5, x: 90, z: 35 }] });
     const bytes = await exportSkfProject({
       projectId: "socket-tray-registration-test",
       projectName: "Socket tray registration",
@@ -178,11 +180,22 @@ describe("socket tray registration", () => {
     const shape = restored.shapes[0];
     expect(shape.kind).toBe("socketTray");
     expect(shape.socketTrayPocketDepth).toBe(12);
+    expect(shape.socketTrayCornerRadius).toBe(4);
     expect(shape.socketTrayPockets).toEqual(original.socketTrayPockets);
     // Same comparator the editor's dirty tracking uses (the pocket list is
     // reference-compared there, so normalize that one field first).
     expect(workplaneShapesEqual({ ...shape, socketTrayPockets: original.socketTrayPockets }, original)).toBe(true);
     expect(socketTrayOptionsForShape(shape)).toEqual(socketTrayOptionsForShape(original));
+  });
+
+  it("render/export dispatch: a rounded shape's app geometry is byte-identical to the module's direct output", () => {
+    const rounded = trayShape({ socketTrayCornerRadius: 3 });
+    const appGeometry = createSocketTrayGeometryForShape(rounded);
+    const direct = createSocketTrayGeometry({ ...COUPON_OPTIONS, cornerRadius: 3 });
+    const appPositions = appGeometry.getAttribute("position").array as Float32Array;
+    const directPositions = direct.getAttribute("position").array as Float32Array;
+    expect(appPositions.length).toBe(directPositions.length);
+    expect(appPositions.every((value, index) => Object.is(value, directPositions[index]))).toBe(true);
   });
 
   it("render/export helper: the app's geometry for a default insert is byte-identical to the module's direct output", () => {

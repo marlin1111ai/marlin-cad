@@ -19,6 +19,7 @@ import {
   createMountedSocketTrayGeometry,
   mountedSocketTrayDimensions,
   mountedSocketTrayPositions,
+  DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS,
   DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
   DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_HEIGHT,
   DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS,
@@ -42,6 +43,7 @@ import {
 import { MULTICONNECT_PRESETS, multiconnectPresetById } from "@/lib/multiconnectPresets";
 import {
   createSocketTrayGeometry,
+  DEFAULT_SOCKET_TRAY_CORNER_RADIUS,
   MIN_SOCKET_TRAY_FLOOR_THICKNESS,
   SOCKET_TRAY_POCKET_EDGE_CLEARANCE,
   SOCKET_TRAY_POCKET_GAP,
@@ -150,6 +152,7 @@ export function socketTrayOptionsForShape(shape: WorkplaneShape): SocketTrayOpti
     width: shapeWidth(shape),
     depth: shapeDepth(shape),
     thickness: shape.height,
+    cornerRadius: shape.socketTrayCornerRadius,
     pockets: (shape.socketTrayPockets ?? []).map((pocket) => ({ diameter: pocket.diameter, depth: pocketDepth, x: pocket.x, z: pocket.z })),
   };
 }
@@ -163,21 +166,36 @@ export function createSocketTrayGeometryForShape(shape: WorkplaneShape) {
   try {
     return createSocketTrayGeometry(options);
   } catch {
-    return createSocketTrayGeometry({ ...options, pockets: [] });
+    try {
+      return createSocketTrayGeometry({ ...options, pockets: [] });
+    } catch {
+      // The tray's own footprint/thickness can't support the requested
+      // corner radius even with no pockets -- fall back to sharp.
+      return createSocketTrayGeometry({ ...options, cornerRadius: 0, pockets: [] });
+    }
   }
 }
 
-// Friendly inline message for the inspector: null when the pocket layout is
-// valid, otherwise the geometry module's rejection translated to 1-based
-// pocket numbers and plain language.
+// Friendly inline message for the inspector: null when the layout is valid,
+// otherwise the geometry module's rejection translated to 1-based pocket
+// numbers and plain language. Runs even with zero pockets, since a corner
+// radius too large for the tray's own footprint/thickness throws with no
+// pockets involved at all.
 export function socketTrayLayoutError(shape: WorkplaneShape): string | null {
   const options = socketTrayOptionsForShape(shape);
-  if (!options.pockets?.length) return null;
+  if (!options.pockets?.length && !options.cornerRadius) return null;
   try {
     socketTrayPositions(options);
     return null;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const widensEdge = message.match(/corner radius .*widens pocket (\d+) .* edge/);
+    if (widensEdge) return `Corner Radius widens Pocket ${Number(widensEdge[1]) + 1} to within ${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm of the tray edge — reduce Corner Radius or move the pocket.`;
+    const widensNeighbor = message.match(/corner radius .*widens pocket (\d+) .* pocket (\d+)/);
+    if (widensNeighbor) return `Corner Radius widens Pocket ${Number(widensNeighbor[1]) + 1} too close to Pocket ${Number(widensNeighbor[2]) + 1} — reduce Corner Radius or space the pockets further apart.`;
+    if (/corner radius .*footprint/.test(message)) return "Corner Radius is too large for the tray's own footprint — reduce Corner Radius, or increase Width/Depth.";
+    if (/corner radius .*straight wall below it in pocket/.test(message)) return "Corner Radius is too large relative to Pocket Depth — reduce Corner Radius or increase Pocket Depth.";
+    if (/corner radius .*straight wall/.test(message)) return "Corner Radius is too large for the tray's own Thickness — reduce Corner Radius or increase Thickness.";
     const overlap = message.match(/pockets (\d+) and (\d+): footprints overlap/);
     if (overlap) return `Pockets ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${SOCKET_TRAY_POCKET_GAP}mm between them.`;
     const edge = message.match(/pocket (\d+): footprint .* edge/);
@@ -223,6 +241,7 @@ export function mountedSocketTrayOptionsForShape(shape: WorkplaneShape): Mounted
     trayDepth: shape.mountedTrayProjection ?? DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
     trayThickness: shape.mountedTrayThickness ?? DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS,
     pocketDepth: shape.mountedTrayPocketDepth ?? DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH,
+    cornerRadius: shape.mountedTrayCornerRadius,
     pockets: (shape.mountedTrayPockets ?? []).map((pocket) => ({ diameter: pocket.diameter, x: pocket.x, z: pocket.z })),
   };
 }
@@ -239,7 +258,13 @@ export function createMountedSocketTrayGeometryForShape(shape: WorkplaneShape) {
     try {
       return createMountedSocketTrayGeometry({ ...options, pockets: [] });
     } catch {
-      return createMountedSocketTrayGeometry({});
+      try {
+        // The plate/tray's own edges can't support the requested corner
+        // radius even with no pockets -- fall back to sharp.
+        return createMountedSocketTrayGeometry({ ...options, cornerRadius: 0, pockets: [] });
+      } catch {
+        return createMountedSocketTrayGeometry({});
+      }
     }
   }
 }
@@ -254,6 +279,13 @@ export function mountedSocketTrayLayoutError(shape: WorkplaneShape): string | nu
     return null;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const widensEdge = message.match(/corner radius .*widens pocket (\d+) .* edge/);
+    if (widensEdge) return `Corner Radius widens Pocket ${Number(widensEdge[1]) + 1} to within ${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm of the tray edge — reduce Corner Radius or move the pocket.`;
+    const widensNeighbor = message.match(/corner radius .*widens pocket (\d+) .* pocket (\d+)/);
+    if (widensNeighbor) return `Corner Radius widens Pocket ${Number(widensNeighbor[1]) + 1} too close to Pocket ${Number(widensNeighbor[2]) + 1} — reduce Corner Radius or space the pockets further apart.`;
+    if (/corner radius .*straight wall below it in pocket/.test(message)) return "Corner Radius is too large relative to Pocket Depth — reduce Corner Radius or increase Pocket Depth.";
+    if (/corner radius .*plate's own top edge/.test(message)) return "Corner Radius is too large for the Plate — reduce Corner Radius or increase Plate Thickness.";
+    if (/corner radius .*tray's own top edge/.test(message)) return "Corner Radius is too large for the Tray — reduce Corner Radius or increase Tray Depth/Tray Thickness.";
     const overlap = message.match(/pockets (\d+) and (\d+): footprints overlap/);
     if (overlap) return `Pockets ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${SOCKET_TRAY_POCKET_GAP}mm between them.`;
     const edge = message.match(/pocket (\d+): footprint .* edge/);
@@ -495,6 +527,7 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     multiconnectPegs: asset.kind === "multiconnectContainer" ? [] : undefined,
     socketTrayPocketDepth: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH : undefined,
     socketTrayPockets: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
+    socketTrayCornerRadius: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_CORNER_RADIUS : undefined,
     mountedTrayPlateThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS : undefined,
     mountedTraySlotSpacing: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING : undefined,
     mountedTraySlotCount: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT : undefined,
@@ -502,6 +535,7 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     mountedTrayThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_THICKNESS : undefined,
     mountedTrayPocketDepth: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH : undefined,
     mountedTrayPockets: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
+    mountedTrayCornerRadius: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS : undefined,
     locked: false,
     hidden: false,
   };

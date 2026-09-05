@@ -4,6 +4,12 @@
 //
 //   node --experimental-strip-types scripts/generate-mounted-socket-tray-coupon.mjs
 //
+// Optional args: [cornerRadius] [outputPath]. With no args this reproduces
+// the exact committed coupon (cornerRadius 0, the same OUT_PATH) -- adding
+// these two optional args changes nothing about the default invocation.
+// Used to generate a separate, differently-named demo export at a nonzero
+// radius without touching the coupon itself.
+//
 // Pulls geometry from the real primitive module
 // (apps/web/src/lib/mountedSocketTrayGeometry.ts) rather than reimplementing
 // it, so the exported STL is exactly what the primitive produces -- same
@@ -43,7 +49,8 @@ register(
 
 const { mountedSocketTrayPositions } = await import("../apps/web/src/lib/mountedSocketTrayGeometry.ts");
 
-const OUT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "mounted-socket-tray-coupon.stl");
+const cornerRadius = process.argv[2] !== undefined ? Number(process.argv[2]) : 0;
+const OUT_PATH = process.argv[3] ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "test-prints", "mounted-socket-tray-coupon.stl");
 
 // Plate numbers are the physically validated wrench-rack recipe
 // (apps/web/src/lib/multiconnectPresets.ts:29-42): 240 x 60mm, 10mm thick,
@@ -76,6 +83,7 @@ const OPTIONS = {
   trayDepth: 60,
   trayThickness: 18,
   pocketDepth: 14,
+  cornerRadius,
   pockets: [
     { diameter: 14, x: 30, z: 30 },
     { diameter: 19, x: 120, z: 30 },

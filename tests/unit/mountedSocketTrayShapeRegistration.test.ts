@@ -126,7 +126,7 @@ describe("mounted socket tray registration", () => {
     expect(mountedSocketTrayLayoutError(placed)).toBeNull();
   });
 
-  it("maps shape fields to geometry options (plate width -> X, plate height -> Y-up, dedicated fields for the rest)", () => {
+  it("maps shape fields to geometry options (plate width -> X, plate height -> Y-up, dedicated fields for the rest, corner radius passes through)", () => {
     const shape = trayShape();
     expect(mountedSocketTrayOptionsForShape(shape)).toEqual({
       plateWidth: 240,
@@ -137,6 +137,7 @@ describe("mounted socket tray registration", () => {
       trayDepth: 60,
       trayThickness: 18,
       pocketDepth: 14,
+      cornerRadius: 0,
       pockets: [
         { diameter: 14, x: 30, z: 30 },
         { diameter: 19, x: 120, z: 30 },
@@ -144,6 +145,7 @@ describe("mounted socket tray registration", () => {
       ],
     });
     expect(mountedSocketTrayOptionsForShape(trayShape({ mountedTrayPockets: [] })).pockets).toEqual([]);
+    expect(mountedSocketTrayOptionsForShape(trayShape({ mountedTrayCornerRadius: 3 })).cornerRadius).toBe(3);
   });
 
   it("shape.depth stays equal to the solid's Z extent for the default insert", () => {
@@ -162,8 +164,18 @@ describe("mounted socket tray registration", () => {
     }
   });
 
+  it("render/export dispatch: a rounded shape's app geometry is byte-identical to the module's direct output", () => {
+    const shape = trayShape({ mountedTrayCornerRadius: 3 });
+    const viaApp = createMountedSocketTrayGeometryForShape(shape).getAttribute("position").array;
+    const viaModule = createMountedSocketTrayGeometry(mountedSocketTrayOptionsForShape(shape)).getAttribute("position").array;
+    expect(viaApp.length).toBe(viaModule.length);
+    for (let i = 0; i < viaApp.length; i += 1) {
+      expect(Object.is(viaApp[i], viaModule[i]), `float ${i} should match exactly`).toBe(true);
+    }
+  });
+
   it("round-trips through .skf with both the scalars and the pocket list preserved", async () => {
-    const shape = trayShape();
+    const shape = trayShape({ mountedTrayCornerRadius: 4 });
     const bytes = await exportSkfProject({
       projectId: "mounted-socket-tray-registration-test",
       projectName: "Mounted socket tray registration",
@@ -183,6 +195,7 @@ describe("mounted socket tray registration", () => {
     expect(restored.mountedTrayProjection).toBe(60);
     expect(restored.mountedTrayThickness).toBe(18);
     expect(restored.mountedTrayPocketDepth).toBe(14);
+    expect(restored.mountedTrayCornerRadius).toBe(4);
     expect(restored.mountedTrayPockets).toEqual(shape.mountedTrayPockets);
     expect(workplaneShapesEqual({ ...restored, mountedTrayPockets: shape.mountedTrayPockets }, shape)).toBe(true);
     expect(mountedSocketTrayOptionsForShape(restored)).toEqual(mountedSocketTrayOptionsForShape(shape));

@@ -57,6 +57,7 @@ import {
 } from "@/lib/openConnectContainerGeometry";
 import { normalizeOpenGridSnapBoardType, normalizeOpenGridSnapBodyShape, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
 import {
+  DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS,
   DEFAULT_MOUNTED_SOCKET_TRAY_DEPTH,
   DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS,
   DEFAULT_MOUNTED_SOCKET_TRAY_POCKET_DEPTH,
@@ -85,7 +86,7 @@ import {
   normalizeMulticonnectSlotTolerance,
 } from "@/lib/multiconnectContainerGeometry";
 import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, mountedSocketTrayLayoutError, multiconnectPegLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
-import { MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
+import { DEFAULT_SOCKET_TRAY_CORNER_RADIUS, MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
 import type { GearType, GridSize, MeasurementAccuracy, WorkplaneShape, WorkplaneWorkspaceSettings } from "@/types/sketchforge";
@@ -424,6 +425,7 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Depth", value: depth, min: minFootprint, max: 320, step: 0.5, onChange: setDepth },
       { label: "Thickness", value: shape.height, min: MIN_SOCKET_TRAY_FLOOR_THICKNESS, max: 60, step: 0.5, onChange: setHeight },
       { label: "Pocket Depth", value: pocketDepth, min: 0.5, max: 60, step: 0.5, onChange: (value) => onUpdate({ socketTrayPocketDepth: value }) },
+      { label: "Corner Radius", value: shape.socketTrayCornerRadius ?? DEFAULT_SOCKET_TRAY_CORNER_RADIUS, min: 0, max: 20, step: 0.5, onChange: (value) => onUpdate({ socketTrayCornerRadius: value }) },
     ];
   }
 
@@ -447,6 +449,7 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Tray Depth", value: trayProjection, min: SOCKET_TRAY_POCKET_EDGE_CLEARANCE * 2, max: 320, step: 0.5, onChange: (value) => onUpdate({ mountedTrayProjection: value, depth: value + plateThickness }) },
       { label: "Tray Thickness", value: trayThickness, min: MIN_SOCKET_TRAY_FLOOR_THICKNESS, max: 60, step: 0.5, onChange: (value) => onUpdate({ mountedTrayThickness: value }) },
       { label: "Pocket Depth", value: mountedPocketDepth, min: 0.5, max: 60, step: 0.5, onChange: (value) => onUpdate({ mountedTrayPocketDepth: value }) },
+      { label: "Corner Radius", value: shape.mountedTrayCornerRadius ?? DEFAULT_MOUNTED_SOCKET_TRAY_CORNER_RADIUS, min: 0, max: 20, step: 0.5, onChange: (value) => onUpdate({ mountedTrayCornerRadius: value }) },
     ];
   }
 

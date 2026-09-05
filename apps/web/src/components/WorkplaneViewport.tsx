@@ -970,6 +970,7 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     multiconnectPegs: shape.multiconnectPegs,
     socketTrayPocketDepth: shape.socketTrayPocketDepth,
     socketTrayPockets: shape.socketTrayPockets,
+    socketTrayCornerRadius: shape.socketTrayCornerRadius,
     mountedTrayPlateThickness: shape.mountedTrayPlateThickness,
     mountedTraySlotSpacing: shape.mountedTraySlotSpacing,
     mountedTraySlotCount: shape.mountedTraySlotCount,
@@ -977,6 +978,7 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     mountedTrayThickness: shape.mountedTrayThickness,
     mountedTrayPocketDepth: shape.mountedTrayPocketDepth,
     mountedTrayPockets: shape.mountedTrayPockets,
+    mountedTrayCornerRadius: shape.mountedTrayCornerRadius,
     text: shape.text,
     font: shape.font,
   });

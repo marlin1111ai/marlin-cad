@@ -244,6 +244,7 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.multiconnectPegs === b.multiconnectPegs &&
     a.socketTrayPocketDepth === b.socketTrayPocketDepth &&
     a.socketTrayPockets === b.socketTrayPockets &&
+    a.socketTrayCornerRadius === b.socketTrayCornerRadius &&
     a.mountedTrayPlateThickness === b.mountedTrayPlateThickness &&
     a.mountedTraySlotSpacing === b.mountedTraySlotSpacing &&
     a.mountedTraySlotCount === b.mountedTraySlotCount &&
@@ -251,6 +252,7 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.mountedTrayThickness === b.mountedTrayThickness &&
     a.mountedTrayPocketDepth === b.mountedTrayPocketDepth &&
     a.mountedTrayPockets === b.mountedTrayPockets &&
+    a.mountedTrayCornerRadius === b.mountedTrayCornerRadius &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&

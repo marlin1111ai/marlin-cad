@@ -54,6 +54,59 @@ const SLOT_TOP_CENTER_Y = PLATE_HEIGHT - MULTICONNECT_SLOT_TOP_OFFSET; // 47
 const CHANNEL_TOP_Y = SLOT_TOP_CENTER_Y + MULTICONNECT_TERMINATOR_CLIP_Y; // 45
 const POCKET_FLOOR_Y = TRAY_THICKNESS - POCKET_DEPTH; // 4
 
+// Converts a raw positions array to ASCII STL text (scene [x, y, z] -> file
+// [x, -z, y], same convention as stlExport.ts / scripts/generate-mounted-
+// socket-tray-coupon.mjs) and parses that TEXT back into scene coordinates --
+// an actual STL round-trip, not a re-use of the in-memory geometry, per
+// KNOWN-FIXES.md's "raycast the exported STL, don't trust mesh checks alone."
+function toStlText(positions: readonly number[]): string {
+  const lines = ["solid mounted_socket_tray_rounding_test"];
+  for (let i = 0; i + 8 < positions.length; i += 9) {
+    const toZUp = (x: number, y: number, z: number) => [x, -z, y] as const;
+    const a = toZUp(positions[i], positions[i + 1], positions[i + 2]);
+    const b = toZUp(positions[i + 3], positions[i + 4], positions[i + 5]);
+    const c = toZUp(positions[i + 6], positions[i + 7], positions[i + 8]);
+    lines.push("  facet normal 0 0 0", "    outer loop", `      vertex ${a[0]} ${a[1]} ${a[2]}`, `      vertex ${b[0]} ${b[1]} ${b[2]}`, `      vertex ${c[0]} ${c[1]} ${c[2]}`, "    endloop", "  endfacet");
+  }
+  lines.push("endsolid mounted_socket_tray_rounding_test");
+  return lines.join("\n");
+}
+
+function parseStlToScenePositions(stl: string): number[] {
+  const positions: number[] = [];
+  const vertexPattern = /vertex\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = vertexPattern.exec(stl))) {
+    const fx = Number(match[1]);
+    const fy = Number(match[2]);
+    const fz = Number(match[3]);
+    positions.push(fx, fz, -fy);
+  }
+  return positions;
+}
+
+function verticalCrossingsFromPositions(positions: readonly number[], x: number, z: number): number[] {
+  const crossings: number[] = [];
+  for (let i = 0; i + 8 < positions.length; i += 9) {
+    const p0: [number, number, number] = [positions[i], positions[i + 1], positions[i + 2]];
+    const p1: [number, number, number] = [positions[i + 3], positions[i + 4], positions[i + 5]];
+    const p2: [number, number, number] = [positions[i + 6], positions[i + 7], positions[i + 8]];
+    const denom = (p1[2] - p2[2]) * (p0[0] - p2[0]) + (p2[0] - p1[0]) * (p0[2] - p2[2]);
+    if (Math.abs(denom) < 1e-9) continue;
+    const a = ((p1[2] - p2[2]) * (x - p2[0]) + (p2[0] - p1[0]) * (z - p2[2])) / denom;
+    const b = ((p2[2] - p0[2]) * (x - p2[0]) + (p0[0] - p2[0]) * (z - p2[2])) / denom;
+    const c = 1 - a - b;
+    if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
+    crossings.push(a * p0[1] + b * p1[1] + c * p2[1]);
+  }
+  crossings.sort((m, n) => m - n);
+  const merged: number[] = [];
+  for (const y of crossings) {
+    if (merged.length === 0 || Math.abs(y - merged[merged.length - 1]) > 1e-6) merged.push(y);
+  }
+  return merged;
+}
+
 describe("mountedSocketTrayPositions: coupon topology", () => {
   it("is watertight and manifold (0 boundary edges, 0 non-manifold edges)", () => {
     const positions = mountedSocketTrayPositions(COUPON);
@@ -347,6 +400,128 @@ describe("mountedSocketTrayPositions: validation guards", () => {
     const analysis = analyzeTriangleSoup(mountedSocketTrayPositions({ ...COUPON, pockets: [] }));
     expect(analysis.boundaryEdges).toBe(0);
     expect(analysis.nonManifoldEdges).toBe(0);
+  });
+});
+
+describe("mountedSocketTrayPositions: corner radius (fillet)", () => {
+  // Regression anchor, same guarantee as the flat tray's own test: radius 0
+  // (or omitted) must be byte-identical to the pre-rounding module.
+  it("radius 0 is identical to omitting cornerRadius entirely", () => {
+    const withZero = mountedSocketTrayPositions({ ...COUPON, cornerRadius: 0 });
+    const omitted = mountedSocketTrayPositions(COUPON);
+    expect(withZero).toEqual(omitted);
+  });
+
+  describe("valid nonzero radius", () => {
+    const ROUNDED: MountedSocketTrayOptions = { ...COUPON, cornerRadius: 3 };
+    const positions = mountedSocketTrayPositions(ROUNDED);
+
+    it("is watertight and manifold (0 boundary edges, 0 non-manifold edges)", () => {
+      expect(positions.every(Number.isFinite)).toBe(true);
+      const analysis = analyzeTriangleSoup(positions);
+      expect(analysis.boundaryEdges).toBe(0);
+      expect(analysis.nonManifoldEdges).toBe(0);
+    });
+
+    it("exact directed-edge manifold (bit-identical seams, consistent winding)", () => {
+      const directed = new Map<string, number>();
+      for (let i = 0; i + 8 < positions.length; i += 9) {
+        const keys = [0, 3, 6].map((offset) => `${positions[i + offset]},${positions[i + offset + 1]},${positions[i + offset + 2]}`);
+        for (let edge = 0; edge < 3; edge += 1) {
+          const key = `${keys[edge]}|${keys[(edge + 1) % 3]}`;
+          directed.set(key, (directed.get(key) ?? 0) + 1);
+        }
+      }
+      for (const [key, count] of directed) {
+        expect(count, `directed edge ${key} should appear exactly once`).toBe(1);
+        const [a, b] = key.split("|");
+        expect(directed.get(`${b}|${a}`), `reverse of ${key} should appear exactly once`).toBe(1);
+      }
+    });
+
+    // Per the recon's flagged risk: raycast the actual EXPORTED STL (an
+    // ASCII round-trip, not the in-memory geometry) at every pocket center,
+    // which always sits inside the narrowest (nominal-radius) part of the
+    // bore regardless of how much the fillet widens the very top.
+    it.each(COUPON_POCKETS)("pocket d=$diameter, rounded (cornerRadius=3): open top-to-floor, solid floor-to-bottom, at its exact center, on the EXPORTED STL", (pocket) => {
+      const exported = parseStlToScenePositions(toStlText(positions));
+      const crossings = verticalCrossingsFromPositions(exported, pocket.x, pocket.z);
+      expect(crossings.length).toBe(2);
+      expect(crossings[0]).toBeCloseTo(0, 3);
+      expect(crossings[1]).toBeCloseTo(POCKET_FLOOR_Y, 3);
+    });
+
+    it("between pockets, the exported STL is still a solid slab top to bottom", () => {
+      const exported = parseStlToScenePositions(toStlText(positions));
+      for (const x of [75, 165]) {
+        const crossings = verticalCrossingsFromPositions(exported, x, 30);
+        expect(crossings.length).toBe(2);
+        expect(crossings[0]).toBeCloseTo(0, 3);
+        expect(crossings[1]).toBeCloseTo(TRAY_THICKNESS, 3);
+      }
+    });
+
+    it("the slot channel is still unobstructed on the exported STL after rounding corners D and F", () => {
+      const exported = parseStlToScenePositions(toStlText(positions));
+      const centers = mountedSocketTraySlotCenters(PLATE_WIDTH, SLOT_SPACING, SLOT_COUNT);
+      const runYs = [0.25, 2, 6, 12, TRAY_THICKNESS - 0.5, TRAY_THICKNESS + 0.5, 24, 34, CHANNEL_TOP_Y - 0.5];
+      for (const cx of centers) {
+        for (const y of runYs) {
+          const crossings = depthCrossings(exported, cx, y);
+          expect(isSolidAt(crossings, MOUNTING_FACE_Z - 0.1), `channel should be open at y=${y}`).toBe(false);
+          expect(isSolidAt(crossings, BLIND_FLOOR_Z - 0.1), `blind floor should be solid at y=${y}`).toBe(true);
+        }
+      }
+    });
+
+    it("near the plate's own outer top edge (corner D), material recedes but is never sealed shut", () => {
+      // 1mm in front of the plate's front face at the very top -- inside the
+      // corner-D fillet's Z range (plateFrontZ..plateFrontZ+cornerRadius).
+      const crossings = verticalCrossingsFromPositions(positions, 36, PLATE_FRONT_Z + 1);
+      expect(crossings.length).toBe(2);
+      expect(crossings[0]).toBeCloseTo(0, 3);
+      expect(crossings[1]).toBeLessThan(PLATE_HEIGHT);
+      expect(crossings[1]).toBeGreaterThan(PLATE_HEIGHT - 3);
+    });
+
+    it("near the tray's own outer top edge (corner F), material recedes but is never sealed shut", () => {
+      const crossings = verticalCrossingsFromPositions(positions, 120, 0.5);
+      expect(crossings.length).toBe(2);
+      expect(crossings[0]).toBeCloseTo(0, 3);
+      expect(crossings[1]).toBeLessThan(TRAY_THICKNESS);
+      expect(crossings[1]).toBeGreaterThan(TRAY_THICKNESS - 3);
+    });
+
+    it("the L-junction (corner E) and corners A, B, C stay exactly sharp -- unaffected by the fillet", () => {
+      // Full plate height well inside the mounting-face region (away from D).
+      const plateSlab = verticalCrossingsFromPositions(positions, 36, MOUNTING_FACE_Z - 5);
+      expect(plateSlab).toEqual([0, PLATE_HEIGHT]);
+      // Full tray thickness just below the junction on the tray side.
+      const traySlab = verticalCrossingsFromPositions(positions, 36, PLATE_FRONT_Z - 1);
+      expect(traySlab).toEqual([0, TRAY_THICKNESS]);
+    });
+  });
+
+  describe("validation", () => {
+    it("throws when the corner radius is too large for the plate's own top edge", () => {
+      expect(() => mountedSocketTrayPositions({ ...COUPON, cornerRadius: 10 })).toThrow(/plate's own top edge/);
+    });
+
+    it("throws when the corner radius is too large for the tray's own top edge", () => {
+      expect(() => mountedSocketTrayPositions({ ...COUPON, plateThickness: 30, cornerRadius: 19 })).toThrow(/tray's own top edge/);
+    });
+
+    it("throws when the corner radius leaves no straight wall below it in a pocket (too large relative to pocket depth)", () => {
+      expect(() => mountedSocketTrayPositions({ ...COUPON, plateThickness: 30, cornerRadius: 5, pocketDepth: 4 })).toThrow(/straight wall/);
+    });
+
+    it("throws when the corner radius widens a pocket (too large relative to the pocket's diameter) into the tray edge", () => {
+      expect(() => mountedSocketTrayPositions({ ...COUPON, plateThickness: 30, cornerRadius: 4, pockets: [{ diameter: 20, x: 15, z: 30 }] })).toThrow(/edge/);
+    });
+
+    it("throws on a negative corner radius", () => {
+      expect(() => mountedSocketTrayPositions({ ...COUPON, cornerRadius: -1 })).toThrow(/zero or positive/);
+    });
   });
 });
 
