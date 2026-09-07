@@ -45,6 +45,14 @@ const COUPON: MountedSocketTrayOptions = {
   pockets: COUPON_POCKETS,
 };
 
+// Pocket x is specified in AS-MOUNTED VIEW SPACE and mirrored into geometry
+// space by the module (normalizedPockets: x_geometry = plateWidth - x_viewed),
+// the same convention the Multiconnect PegPlate uses -- see the MOUNTED-VIEW X
+// CONVENTION block in mountedSocketTrayGeometry.ts. Every raycast below is
+// aimed in GEOMETRY space, so it goes through this converter rather than using
+// a pocket's viewed x directly.
+const geometryX = (viewedX: number) => PLATE_WIDTH - viewedX;
+
 // Derived planes, recomputed here from the same rules the module uses rather
 // than copied as literals.
 const MOUNTING_FACE_Z = TRAY_DEPTH + PLATE_THICKNESS; // 70
@@ -256,23 +264,42 @@ function isSolidAt(crossings: number[], at: number): boolean {
 describe("mountedSocketTrayPositions: pockets are open blind pockets, not sealed or through-holes", () => {
   const geometry = createMountedSocketTrayGeometry(COUPON);
 
-  it.each(COUPON_POCKETS)("pocket d=$diameter: open top-to-floor, solid floor-to-bottom, at its exact center", (pocket) => {
-    const crossings = verticalCrossings(geometry, pocket.x, pocket.z);
+  it.each(COUPON_POCKETS)("pocket d=$diameter: open top-to-floor, solid floor-to-bottom, at its mirrored geometry center", (pocket) => {
+    const crossings = verticalCrossings(geometry, geometryX(pocket.x), pocket.z);
     expect(crossings.length).toBe(2);
     expect(crossings[0]).toBeCloseTo(0, 4); // tray bottom face
     expect(crossings[1]).toBeCloseTo(POCKET_FLOOR_Y, 4); // pocket floor, NOT the tray top
   });
 
+  // The mirror's own regression anchor, in the same spirit as the PegPlate
+  // lesson that produced it: a pocket asked for at viewed x lands at
+  // plateWidth - x in geometry, and there is NO bore at the unmirrored
+  // coordinate. Without the second half, dropping the mirror on a
+  // mirror-symmetric layout could still pass.
+  it("mirrors pocket x into geometry space: material where the unmirrored x would be, bore where the mirrored x is", () => {
+    const asymmetric = mountedSocketTrayPositions({ ...COUPON, pockets: [{ diameter: 20, x: 40, z: 30 }] });
+    const mirrored = verticalCrossingsFromPositions(asymmetric, geometryX(40), 30);
+    expect(mirrored.length).toBe(2);
+    expect(mirrored[0]).toBeCloseTo(0, 4);
+    expect(mirrored[1]).toBeCloseTo(POCKET_FLOOR_Y, 4); // open to the pocket floor at x = 200
+    const unmirrored = verticalCrossingsFromPositions(asymmetric, 40, 30);
+    expect(unmirrored.length).toBe(2);
+    expect(unmirrored[0]).toBeCloseTo(0, 4);
+    expect(unmirrored[1]).toBeCloseTo(TRAY_THICKNESS, 4); // solid slab at x = 40
+  });
+
   it.each(COUPON_POCKETS)("pocket d=$diameter: still open off-centre, 3mm in from the rim", (pocket) => {
     const offset = pocket.diameter / 2 - 3;
-    const crossings = verticalCrossings(geometry, pocket.x + offset, pocket.z);
+    const crossings = verticalCrossings(geometry, geometryX(pocket.x) + offset, pocket.z);
     expect(crossings.length).toBe(2);
     expect(crossings[0]).toBeCloseTo(0, 4);
     expect(crossings[1]).toBeCloseTo(POCKET_FLOOR_Y, 4);
   });
 
   it("between pockets, the tray is a solid slab (no accidental opening)", () => {
-    const midpoints = [(30 + 120) / 2, (120 + 210) / 2];
+    // Midpoints between adjacent pocket centers, in geometry space.
+    const centers = COUPON_POCKETS.map((pocket) => geometryX(pocket.x)).sort((a, b) => a - b);
+    const midpoints = centers.slice(1).map((center, index) => (centers[index] + center) / 2);
     for (const x of midpoints) {
       const crossings = verticalCrossings(geometry, x, 30);
       expect(crossings.length).toBe(2);
@@ -327,7 +354,16 @@ describe("mountedSocketTrayPositions: the slot channel is unobstructed along its
     // Below the tray's top face, at a slot's own X, the ray along Z must be
     // solid through the tray, through the junction, and on into the plate up
     // to the channel's blind floor -- one unbroken run, i.e. one solid.
-    const crossings = depthCrossings(positions, centers[0], TRAY_THICKNESS / 2);
+    //
+    // The slot X is chosen clear of every pocket bore: this ray runs at
+    // y = TRAY_THICKNESS / 2, which is ABOVE the pocket floor, so a slot that
+    // happens to sit under a pocket would read (correctly) as void there and
+    // say nothing about the junction. Sample the fusion, not a bore.
+    const clearOfPockets = (x: number) =>
+      COUPON_POCKETS.every((pocket) => Math.abs(x - geometryX(pocket.x)) > pocket.diameter / 2 + 1);
+    const junctionX = centers.find(clearOfPockets);
+    expect(junctionX, "expected at least one slot center clear of every pocket").toBeDefined();
+    const crossings = depthCrossings(positions, junctionX!, TRAY_THICKNESS / 2);
     for (const z of [1, TRAY_DEPTH / 2, PLATE_FRONT_Z - 0.1, PLATE_FRONT_Z + 0.1, BLIND_FLOOR_Z - 0.1]) {
       expect(isSolidAt(crossings, z), `should be solid at z=${z}`).toBe(true);
     }
@@ -443,9 +479,9 @@ describe("mountedSocketTrayPositions: corner radius (fillet)", () => {
     // ASCII round-trip, not the in-memory geometry) at every pocket center,
     // which always sits inside the narrowest (nominal-radius) part of the
     // bore regardless of how much the fillet widens the very top.
-    it.each(COUPON_POCKETS)("pocket d=$diameter, rounded (cornerRadius=3): open top-to-floor, solid floor-to-bottom, at its exact center, on the EXPORTED STL", (pocket) => {
+    it.each(COUPON_POCKETS)("pocket d=$diameter, rounded (cornerRadius=3): open top-to-floor, solid floor-to-bottom, at its mirrored geometry center, on the EXPORTED STL", (pocket) => {
       const exported = parseStlToScenePositions(toStlText(positions));
-      const crossings = verticalCrossingsFromPositions(exported, pocket.x, pocket.z);
+      const crossings = verticalCrossingsFromPositions(exported, geometryX(pocket.x), pocket.z);
       expect(crossings.length).toBe(2);
       expect(crossings[0]).toBeCloseTo(0, 3);
       expect(crossings[1]).toBeCloseTo(POCKET_FLOOR_Y, 3);
@@ -453,7 +489,8 @@ describe("mountedSocketTrayPositions: corner radius (fillet)", () => {
 
     it("between pockets, the exported STL is still a solid slab top to bottom", () => {
       const exported = parseStlToScenePositions(toStlText(positions));
-      for (const x of [75, 165]) {
+      const centers = COUPON_POCKETS.map((pocket) => geometryX(pocket.x)).sort((a, b) => a - b);
+      for (const x of centers.slice(1).map((center, index) => (centers[index] + center) / 2)) {
         const crossings = verticalCrossingsFromPositions(exported, x, 30);
         expect(crossings.length).toBe(2);
         expect(crossings[0]).toBeCloseTo(0, 3);

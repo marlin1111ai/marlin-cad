@@ -134,6 +134,26 @@ and remains the test piece.
   3mm), was added alongside the original coupon as a NEW file, not a
   replacement. Full detail: `reference/reports/socket-tray-rounding-recon.md`,
   `reference/reports/socket-tray-rounding-build.md`.
+- **Pocket-X mirror fix (2026-09-06):** pocket `x` on the MOUNTED tray is now
+  specified in as-mounted view space and mirrored into geometry space at one
+  marked spot in `normalizedPockets` (`x_geometry = plateWidth - x_viewed`),
+  matching `normalizedPegs`. It had wrongly inherited the flat tray's
+  no-mirror rule, so a pocket typed at X = 30 rendered near the RIGHT end of
+  the shelf. Found by the owner in the running app; diagnosed across four
+  read-only recon passes that first ruled out the pocket math itself, any
+  default rotation, and the whole inspector→mesh data path before landing on
+  the convention mismatch. Slots needed no change
+  (`mountedSocketTraySlotCenters` is mirror-symmetric by construction) and
+  pocket z is unaffected. The flat Socket Tray is correct as-is and was not
+  touched. See DECISIONS.md's corrected entry and KNOWN-FIXES.md.
+- **Both mounted coupon STLs were regenerated with the fix and deliberately
+  replace their previous contents** (owner approved; neither had been
+  printed, so nothing physical depended on the old bytes).
+  `test-prints/mounted-socket-tray-coupon.stl` is 3,524 triangles as before —
+  same topology, mirrored pocket positions — and
+  `test-prints/mounted-socket-tray-coupon-rounded-demo.stl` is 5,876. As
+  mounted and read left to right, the coupon's pockets are now 14 / 19 / 25mm
+  at viewed x = 30 / 120 / 210, which is what the defaults always said.
 - Status: **unvalidated — the coupon has not been printed.**
 - Full detail: `reference/reports/socket-tray-mounted-recon.md`,
   `reference/reports/mounted-socket-tray-build.md`.
@@ -143,13 +163,21 @@ and remains the test piece.
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
 `test-prints/mounted-socket-tray-coupon.stl` (mounted, 3 pockets) has been
 printed. **No production tray is built until both are printed and
-hand-verified.** Both files stay frozen at Corner Radius 0 (sharp);
+hand-verified.** The mounted coupon was regenerated on 2026-09-06 to carry
+the pocket-X mirror fix, so its bytes deliberately differ from the
+originally committed file; the flat sampler is unchanged and still holds its
+byte-identical regression check. Both files stay frozen at Corner Radius 0
+(sharp);
 rounding changes the mesh, so any future production or demo print at a
 chosen Corner Radius is a NEW coupon printed and hand-verified on its own
 terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Mounted Socket Tray pocket-X mirror fix: `normalizedPockets` now mirrors
+  viewed x into geometry space the way `normalizedPegs` does, correcting
+  pockets that rendered and would have printed at the wrong end of the shelf;
+  both mounted coupon STLs regenerated, the flat tray untouched.
 - Owner-typed Corner Radius fillet added to both Socket Trays: rounds the
   tray's own outer top edges and every pocket rim via a mitered quarter-arc
   technique matching the Multiconnect peg fillet, no CSG; radius 0 (default)
@@ -268,9 +296,9 @@ succeeded and published `1.1.0`. Full detail:
 
 ## Test suite
 
-415 unit tests passing across 49 files (`npm test`, 2026-09-04), of which
+416 unit tests passing across 49 files (`npm test`, 2026-09-06), of which
 36 are in `tests/unit/socketTrayGeometry.test.ts`, 8 in
-`tests/unit/socketTrayShapeRegistration.test.ts`, 56 in
+`tests/unit/socketTrayShapeRegistration.test.ts`, 57 in
 `tests/unit/mountedSocketTrayGeometry.test.ts` and 13 in
 `tests/unit/mountedSocketTrayShapeRegistration.test.ts`.
 

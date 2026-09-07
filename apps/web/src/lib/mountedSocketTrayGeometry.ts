@@ -101,10 +101,37 @@ import {
 // Z = trayDepth + plateThickness is the mounting face that goes against the
 // board. The tray sits at the bottom of the plate: Y in [0, trayThickness].
 //
-// Like the flat Socket Tray and unlike the Multiconnect PegPlate, pocket x is
-// NOT mirrored. The mirror on the PegPlate exists because pegs address a front
-// face viewed from the wall side; pockets here open UPWARD on a horizontal
-// shelf, so x runs the same direction the viewport shows it.
+// ===================== MOUNTED-VIEW X CONVENTION =====================
+//
+// Like the Multiconnect PegPlate, and UNLIKE the flat Socket Tray, pocket x
+// IS mirrored: `pockets[].x` is measured from the LEFT edge as the viewer
+// standing in front of the MOUNTED part sees it, and normalizedPockets
+// mirrors it into geometry space at exactly one marked spot
+// (x_geometry = plateWidth - x_viewed).
+//
+// Why this part inherits the plate's rule, not the flat tray's: this shape
+// has a FIXED as-mounted viewing side. The mounting face (Z =
+// trayDepth + plateThickness) goes against the board and the tray projects
+// forward to Z = 0, so the viewer always stands at low Z and looks along
+// +Z -- and a viewer looking along +Z with +Y up has +X on their LEFT.
+// Geometry x = 0 is therefore the mounted viewer's RIGHT edge, exactly as
+// on the Multiconnect plate (see its own MOUNTED-VIEW X CONVENTION block).
+// Nothing about that mapping is changed by a pocket opening upward: the
+// opening direction is a Y-axis fact, while left/right is an X-axis fact
+// about a rigid body whose orientation the wall mount fully determines.
+//
+// The flat Socket Tray's no-mirror exemption does NOT apply here. That tray
+// is standalone and lies flat with no fixed viewing side (socketTrayGeometry
+// .ts: "it is not wall-mounted like Multiconnect"), so its x reads plain
+// left-to-right. This one cannot be viewed from the other side -- the slot
+// channel runs down and out the bottom edge and the shelf projects forward,
+// which between them leave exactly one valid mounting orientation.
+//
+// Slots need no equivalent mirror: mountedSocketTraySlotCenters is
+// mirror-symmetric by construction, so mirroring the slot run maps it onto
+// itself. Pocket z is likewise unaffected -- it runs front-to-back, which a
+// left/right mirror does not touch.
+// =====================================================================
 //
 // ===== CORNER RADIUS (fillet), AND WHY THE L-JUNCTION (POINT E) IS EXCLUDED =====
 //
@@ -163,8 +190,11 @@ export type MountedSocketTrayPocket = {
   // Finished hole diameter, mm (the owner types the measured socket OD plus
   // their own clearance; no socket-size lookup happens anywhere).
   diameter: number;
-  // Pocket center on the tray, geometry space. x from the LEFT edge, z from
-  // the tray's FRONT edge. No view-space mirror -- see file header.
+  // Pocket center on the tray. x is in AS-MOUNTED VIEW SPACE: measured from
+  // the LEFT edge as the viewer standing in front of the mounted part sees
+  // it, mirrored into geometry space by normalizedPockets -- see the
+  // MOUNTED-VIEW X CONVENTION block in the file header. z is plain geometry
+  // space, from the tray's FRONT edge, and is not mirrored.
   x: number;
   z: number;
 };
@@ -287,16 +317,22 @@ function normalizedPockets(
     if (![diameter, x, z].every(Number.isFinite) || diameter <= 0) {
       throw new Error(`mounted socket tray pocket ${index}: diameter/x/z must be finite and the diameter positive`);
     }
+    // MOUNTED-VIEW MIRROR -- the one place viewed-space x (see
+    // MountedSocketTrayPocket) becomes geometry X. Everything downstream of
+    // this line works in geometry space only. Same operation, same reason as
+    // multiconnectContainerGeometry.ts's normalizedPegs; do NOT "simplify" it
+    // away.
+    const geometryX = plateWidth - x;
     const radius = diameter / 2;
     if (
-      x - radius < SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
-      x + radius > plateWidth - SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
+      geometryX - radius < SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
+      geometryX + radius > plateWidth - SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
       z - radius < SOCKET_TRAY_POCKET_EDGE_CLEARANCE ||
       z + radius > trayDepth - SOCKET_TRAY_POCKET_EDGE_CLEARANCE
     ) {
       throw new Error(`mounted socket tray pocket ${index}: footprint (r=${radius}mm) is within ${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm of the tray edge`);
     }
-    result.push({ x, z, radius });
+    result.push({ x: geometryX, z, radius });
   });
   for (let i = 0; i < result.length; i += 1) {
     for (let j = i + 1; j < result.length; j += 1) {

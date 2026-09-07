@@ -12,7 +12,7 @@ import {
 import { createMountedSocketTrayGeometry, mountedSocketTrayPositions } from "@/lib/mountedSocketTrayGeometry";
 import { exportMeshesToStl } from "@/lib/stlExport";
 import { exportSkfProject, importSkfProject } from "@/lib/skfProject";
-import { fallbackSolidColor, workplaneShapesEqual } from "@/lib/workplaneShapes";
+import { fallbackSolidColor, shapeWidth, workplaneShapesEqual } from "@/lib/workplaneShapes";
 import { DEFAULT_SNAP_GRID, DEFAULT_WORKPLANE_WORKSPACE } from "@/lib/workplaneSettings";
 import { analyzeTriangleSoup } from "@/lib/svgImport";
 import type { WorkplaneShape } from "@/types/sketchforge";
@@ -220,10 +220,15 @@ describe("mounted socket tray registration", () => {
     expect(analysis.nonManifoldEdges).toBe(0);
   });
 
-  it("the default insert's pockets are genuinely open blind pockets in the app's own geometry", () => {
+  // Pocket x is in as-mounted view space and the module mirrors it into
+  // geometry space (x_geometry = plateWidth - x_viewed), so a raycast aimed in
+  // geometry space must mirror too -- see the MOUNTED-VIEW X CONVENTION block
+  // in mountedSocketTrayGeometry.ts.
+  it("the default insert's pockets are genuinely open blind pockets in the app's own geometry, at their mirrored positions", () => {
     const geometry = createMountedSocketTrayGeometryForShape(trayShape());
+    const plateWidth = shapeWidth(trayShape());
     for (const pocket of DEFAULT_MOUNTED_SOCKET_TRAY_SHAPE_POCKETS) {
-      const crossings = verticalCrossings(geometry, pocket.x, pocket.z);
+      const crossings = verticalCrossings(geometry, plateWidth - pocket.x, pocket.z);
       expect(crossings.length, `pocket d=${pocket.diameter}`).toBe(2);
       expect(crossings[0]).toBeCloseTo(0, 4); // tray bottom
       expect(crossings[1]).toBeCloseTo(4, 4); // pocket floor at 18 - 14
