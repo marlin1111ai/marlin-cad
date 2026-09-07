@@ -174,10 +174,19 @@ terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- **Released as `1.3.0` and live on Unraid.** The release carries the
+  Mounted Socket Tray pocket-X mirror fix (`3f5aba8`) plus the version bump
+  (`feea3e7`); GitHub Actions built and published the image on the push, and
+  the owner pulled it and verified it working in the browser.
 - Mounted Socket Tray pocket-X mirror fix: `normalizedPockets` now mirrors
   viewed x into geometry space the way `normalizedPegs` does, correcting
   pockets that rendered and would have printed at the wrong end of the shelf;
-  both mounted coupon STLs regenerated, the flat tray untouched.
+  both mounted coupon STLs regenerated, the flat tray untouched (`3f5aba8`).
+  Both mounted coupons were regenerated from the fixed geometry —
+  `test-prints/mounted-socket-tray-coupon.stl` (3,524 triangles) and
+  `test-prints/mounted-socket-tray-coupon-rounded-demo.stl` (5,876) — and
+  **both coupons, flat and mounted, remain unprinted; the physical gate is
+  unchanged.**
 - Owner-typed Corner Radius fillet added to both Socket Trays: rounds the
   tray's own outer top edges and every pocket rim via a mitered quarter-arc
   technique matching the Multiconnect peg fillet, no CSG; radius 0 (default)
@@ -232,19 +241,24 @@ terms, never a comparison against these frozen zero-radius files.
 ## Production deployment
 
 - marlin-cad runs as a Docker container on Unraid (`192.168.1.250`), pulled
-  from `ghcr.io/marlin1111ai/marlin-cad:1.1.0`. Docker runs on Unraid only —
-  not on the Linux dev box, and the owner does not want it there.
+  from `ghcr.io/marlin1111ai/marlin-cad:1.3.0` — pulled by the owner and
+  verified working in the browser. Docker runs on Unraid only — not on the
+  Linux dev box, and the owner does not want it there.
 - Host port 3001 → container port 3000.
 - Host path `/mnt/user/appdata/marlin-cad/projects` → `/data/projects`.
   `SKETCHFORGE_SHARED_PROJECTS_DIR=/data/projects` is baked into the image, so
   only the path mapping is needed; without it, projects live inside the
   container and are lost on update.
 - The `1.0.0` image was built and pushed from Unraid by hand, before GitHub
-  Actions was enabled on this fork. `1.1.0` is the first image GitHub
+  Actions was enabled on this fork. `1.1.0` was the first image GitHub
   Actions built and published; see the Release process subsection below.
+  Those two version numbers are history, not the deployed tag — the
+  container runs `1.3.0`.
 - The prior `marlin-cad` container was found absent from the Unraid box
-  (cause not recorded) and was recreated fresh from the `1.1.0` tag with the
-  settings above. Verified working in the browser.
+  (cause not recorded) and was recreated fresh at that time from the then-
+  current `1.1.0` tag with the settings above. Port mapping, volume mapping
+  and every other setting are unchanged since; only the image tag has moved
+  forward, to `1.3.0`.
 - Blinking Docker Manager icon fix re-applied on Unraid:
   `cp /mnt/user/appdata/marlin-cad/freecad.png /usr/local/emhttp/plugins/dynamix.docker.manager/images/question.png`
   — RAM-only, lost on reboot.
@@ -278,6 +292,11 @@ succeeded and published `1.1.0`. Full detail:
 `reference/reports/release-1.1.0-actions.md`,
 `reference/reports/release-1.1.0-publish.md`,
 `reference/reports/release-1.1.0-banked.md`.
+
+Since then the process has run unattended: `1.2.0`
+(`reference/reports/release-1.2.0.md`) confirmed Actions publishes
+automatically on a push to `main` with no manual dispatch, and `1.3.0`
+followed the same three steps and is the tag now deployed.
 
 ## Print status
 
