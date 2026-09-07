@@ -24,7 +24,8 @@ export type ShapeKind =
   | "multiconnectContainer"
   | "socketTray"
   | "mountedSocketTray"
-  | "screwdriverTray";
+  | "screwdriverTray"
+  | "mountedScrewdriverTray";
 
 export type ShapeAsset = {
   id: string;
@@ -172,6 +173,15 @@ export type MountedSocketTrayShapePocket = { diameter: number; x: number; z: num
 // shared or per-row: the bore goes all the way through, so its depth is the
 // tray thickness.
 export type ScrewdriverTrayShapeHole = { diameter: number; x: number; z: number };
+
+// One hole row in the inspector's Mounted Screwdriver Tray hole list. `x` is in
+// AS-MOUNTED VIEW SPACE -- from the LEFT edge as the viewer standing in front
+// of the mounted part sees it -- and the geometry module mirrors it into
+// geometry space at one marked spot, exactly as the Mounted Socket Tray and the
+// Multiconnect PegPlate do. `z` is plain geometry space from the shelf's FRONT
+// edge and is not mirrored. Like the flat Screwdriver Tray there is NO depth:
+// the bore goes all the way through, so its depth is the tray thickness.
+export type MountedScrewdriverTrayShapeHole = { diameter: number; x: number; z: number };
 
 export type SketchRevolveSettings = {
   startAngle: number;
@@ -329,6 +339,21 @@ export type WorkplaneShape = {
   // every hole's TOP rim. 0 (default) = sharp. The bottom rim is always
   // sharp.
   screwdriverTrayCornerRadius?: number;
+  // Mounted Screwdriver Tray (kind "mountedScrewdriverTray"). Plate width /
+  // plate height live in width / height (height is the Y-up dimension); depth
+  // holds the solid's full Z extent, i.e. tray projection + plate thickness, so
+  // the selection frame matches the mesh. Everything else is dedicated. There
+  // is deliberately no pocket-depth field: the holes are through-bores.
+  mountedScrewdriverTrayPlateThickness?: number;
+  mountedScrewdriverTraySlotSpacing?: number;
+  mountedScrewdriverTraySlotCount?: number;
+  mountedScrewdriverTrayProjection?: number;
+  mountedScrewdriverTrayThickness?: number;
+  mountedScrewdriverTrayHoles?: MountedScrewdriverTrayShapeHole[];
+  // Owner-typed fillet radius, applied to the plate's own top edge, the tray's
+  // own top edge, and every hole's TOP rim. 0 (default) = sharp. Never applied
+  // to the L-junction or to any hole's bottom rim.
+  mountedScrewdriverTrayCornerRadius?: number;
   text?: string;
   font?: string;
   importedMesh?: {

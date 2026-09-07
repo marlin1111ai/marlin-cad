@@ -85,7 +85,17 @@ import {
   normalizeMulticonnectSlotSpacing,
   normalizeMulticonnectSlotTolerance,
 } from "@/lib/multiconnectContainerGeometry";
-import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, mountedSocketTrayLayoutError, multiconnectPegLayoutError, screwdriverTrayLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
+import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, mountedScrewdriverTrayLayoutError, mountedSocketTrayLayoutError, multiconnectPegLayoutError, screwdriverTrayLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
+import {
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_CORNER_RADIUS,
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_DEPTH,
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_PLATE_THICKNESS,
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT,
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_SLOT_SPACING,
+  DEFAULT_MOUNTED_SCREWDRIVER_TRAY_THICKNESS,
+  MAX_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT,
+  MIN_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT,
+} from "@/lib/mountedScrewdriverTrayGeometry";
 import { DEFAULT_SCREWDRIVER_TRAY_CORNER_RADIUS, MIN_SCREWDRIVER_TRAY_THICKNESS } from "@/lib/screwdriverTrayGeometry";
 import { DEFAULT_SOCKET_TRAY_CORNER_RADIUS, MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
@@ -471,6 +481,32 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
     ];
   }
 
+  if (shape.kind === "mountedScrewdriverTray") {
+    // Identical row set to the Mounted Socket Tray's, minus Pocket Depth: the
+    // bores go all the way through the shelf, so there is no depth to type.
+    // Plate Width / Plate Height are the plate's X / Y-up footprint and live in
+    // shape.width / shape.height. shape.depth is the solid's full Z extent
+    // (tray projection + plate thickness) and is not edited directly: the Tray
+    // Depth and Plate Thickness rows write their own field AND resync depth, so
+    // the selection frame keeps matching the mesh. Tray Thickness is floored at
+    // the flat Screwdriver Tray's own 10mm minimum, not the socket trays' 2mm
+    // floor constant. Slot Count is a count, not a length -- deliberately
+    // absent from propertyUsesLengthUnit.
+    const msPlateThickness = shape.mountedScrewdriverTrayPlateThickness ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_PLATE_THICKNESS;
+    const msTrayProjection = shape.mountedScrewdriverTrayProjection ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_DEPTH;
+    const msTrayThickness = shape.mountedScrewdriverTrayThickness ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_THICKNESS;
+    return [
+      { label: "Plate Width", value: width, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, step: 0.5, onChange: setWidth },
+      { label: "Plate Height", value: shape.height, min: MIN_MULTICONNECT_PLATE_DIMENSION, max: 320, step: 0.5, onChange: setHeight },
+      { label: "Plate Thickness", value: msPlateThickness, min: MULTICONNECT_BACK_THICKNESS, max: 20, step: 0.5, onChange: (value) => onUpdate({ mountedScrewdriverTrayPlateThickness: value, depth: msTrayProjection + value }) },
+      { label: "Slot Spacing", value: shape.mountedScrewdriverTraySlotSpacing ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_SLOT_SPACING, min: MIN_MULTICONNECT_SLOT_SPACING, max: MAX_MULTICONNECT_SLOT_SPACING, step: 0.5, onChange: (value) => onUpdate({ mountedScrewdriverTraySlotSpacing: value }) },
+      { label: "Slot Count", value: shape.mountedScrewdriverTraySlotCount ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT, min: MIN_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT, max: MAX_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT, step: 1, onChange: (value) => onUpdate({ mountedScrewdriverTraySlotCount: Math.round(value) }) },
+      { label: "Tray Depth", value: msTrayProjection, min: SOCKET_TRAY_POCKET_EDGE_CLEARANCE * 2, max: 320, step: 0.5, onChange: (value) => onUpdate({ mountedScrewdriverTrayProjection: value, depth: value + msPlateThickness }) },
+      { label: "Tray Thickness", value: msTrayThickness, min: MIN_SCREWDRIVER_TRAY_THICKNESS, max: 60, step: 0.5, onChange: (value) => onUpdate({ mountedScrewdriverTrayThickness: value }) },
+      { label: "Corner Radius", value: shape.mountedScrewdriverTrayCornerRadius ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_CORNER_RADIUS, min: 0, max: 20, step: 0.5, onChange: (value) => onUpdate({ mountedScrewdriverTrayCornerRadius: value }) },
+    ];
+  }
+
   if (shape.kind === "openGridSnap") {
     const boardType = normalizeOpenGridSnapBoardType(shape.boardType);
     const snapBodyShape = normalizeOpenGridSnapBodyShape(shape.snapBodyShape);
@@ -849,6 +885,9 @@ export function ShapeInspector({
       {shape.kind === "screwdriverTray" ? (
         <ScrewdriverTrayHoleCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
       ) : null}
+      {shape.kind === "mountedScrewdriverTray" ? (
+        <MountedScrewdriverTrayHoleCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
+      ) : null}
       {gearType === "helical" ? (
         <div className={`property-card ${gearHelixOpen ? "" : "collapsed"}`}>
           <button
@@ -1128,6 +1167,109 @@ function ScrewdriverTrayHoleCard({
                 value={hole.x}
                 min={0}
                 max={trayWidth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(x) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, x } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Hole ${index + 1} Z`}
+                value={hole.z}
+                min={0}
+                max={trayDepth}
+                step={0.5}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(z) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, z } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setHoles(holes.filter((_, i) => i !== index))}>
+                <span>Remove Hole {index + 1}</span>
+              </button>
+            </div>
+          ))}
+          {layoutError ? (
+            <p role="alert" style={{ color: "#e0524d", margin: "4px 2px", fontSize: "0.86em", lineHeight: 1.35 }}>
+              {layoutError}
+            </p>
+          ) : null}
+          <button className="inspector-action-button" type="button" disabled={disabled} onClick={addHole}>
+            <span>Add Hole</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Hole list editor for the Mounted Screwdriver Tray -- the same shape as
+// ScrewdriverTrayHoleCard above, reading this shape's own fields. There is
+// deliberately NO depth control: the bore goes all the way through the shelf,
+// so its depth is the Tray Thickness.
+//
+// `x` is in AS-MOUNTED VIEW SPACE -- from the LEFT edge as the viewer standing
+// in front of the mounted part sees it -- and the geometry module mirrors it
+// into geometry space at one marked spot, exactly as the Mounted Socket Tray
+// and the Multiconnect PegPlate do. `z` is from the shelf's FRONT edge and is
+// not mirrored. A bad layout (overlap, edge crowding, too thin a shelf, too
+// many slots) does not crash anything: the viewport falls back to the bare tray
+// and the module's rejection shows here as an inline message.
+function MountedScrewdriverTrayHoleCard({
+  shape,
+  workspace,
+  disabled,
+  onUpdate,
+  onInteractionActiveChange,
+}: {
+  shape: WorkplaneShape;
+  workspace: WorkplaneWorkspaceSettings;
+  disabled?: boolean;
+  onUpdate: ShapeInspectorUpdate;
+  onInteractionActiveChange?: (active: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const holes = shape.mountedScrewdriverTrayHoles ?? [];
+  const plateWidth = shapeWidth(shape);
+  const trayDepth = shape.mountedScrewdriverTrayProjection ?? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_DEPTH;
+  const layoutError = mountedScrewdriverTrayLayoutError(shape);
+  const setHoles = (next: NonNullable<WorkplaneShape["mountedScrewdriverTrayHoles"]>) => onUpdate({ mountedScrewdriverTrayHoles: next });
+  const addHole = () => {
+    const last = holes[holes.length - 1];
+    setHoles([...holes, { diameter: 10, x: last ? last.x + 36 : 30, z: trayDepth / 2 }]);
+  };
+  return (
+    <div className={`property-card ${open ? "" : "collapsed"}`}>
+      <button
+        className="property-card-header"
+        type="button"
+        aria-expanded={open}
+        aria-controls={`mounted-screwdriver-tray-holes-${shape.id}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>Holes</span>
+        <ChevronUp className={open ? "" : "collapsed"} size={25} strokeWidth={2.8} />
+      </button>
+      {open ? (
+        <div className="property-list" id={`mounted-screwdriver-tray-holes-${shape.id}`}>
+          {holes.map((hole, index) => (
+            <div key={index}>
+              <RangeProperty
+                label={`Hole ${index + 1} Diameter`}
+                value={hole.diameter}
+                min={2}
+                max={60}
+                step={0.1}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(diameter) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, diameter } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Hole ${index + 1} X`}
+                value={hole.x}
+                min={0}
+                max={plateWidth}
                 step={0.5}
                 workspace={workspace}
                 disabled={disabled}

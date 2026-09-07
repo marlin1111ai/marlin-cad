@@ -224,6 +224,83 @@ nothing was built for it. Both Socket Trays are unchanged by this work.
   `test-prints/` was untouched.
 - Status: **unvalidated and unprinted**, with no candidate file to print.
 
+## Mounted Screwdriver Tray — built and registered, unprinted
+
+The wall-hanging sibling of the flat Screwdriver Tray, and the through-bore
+sibling of the Mounted Socket Tray: a Multiconnect slotted back plate with NO
+pegs and a shelf projecting forward from its bottom, carrying round bores that
+run all the way through. Built as Pass B of the two-pass screwdriver plan. All
+three earlier trays are unchanged by this work.
+
+- Module: `apps/web/src/lib/mountedScrewdriverTrayGeometry.ts` — new sibling
+  primitive, additive only. Imports the baked slot data
+  (`multiconnectSlotMesh.ts`), the plate constants
+  (`multiconnectContainerGeometry.ts`), the hole-layout guards
+  (`socketTrayGeometry.ts`) and `MIN_SCREWDRIVER_TRAY_THICKNESS`
+  (`screwdriverTrayGeometry.ts`); edits none of them.
+- ONE solid, boundary representation only — no CSG, no boolean union, no
+  concatenated meshes. Same L-prism construction as the Mounted Socket Tray:
+  one six-point outline array, and both the extruded side faces and the two end
+  caps read their corners out of it, so the plate-to-tray junction vertices are
+  bit-identical because they ARE the same doubles.
+- What differs from the Mounted Socket Tray, and nothing else does: no floor
+  cap is emitted; the bore wall spans the full tray thickness (shelf top to
+  Y = 0); and the bottom face — already one earcut cap carrying a channel-notch
+  indentation per slot — now also carries one hole per bore. Bores and channels
+  are disjoint in Z by at least 7.35mm under every allowed parameter
+  combination.
+- **Hole x is mirrored** into geometry space at one marked spot in
+  `normalizedHoles` (`x_geometry = plateWidth - x_viewed`), matching
+  `normalizedPegs` and the Mounted Socket Tray's `normalizedPockets`. Hole z is
+  not. See DECISIONS.md.
+- Guards: the floor-thickness guard and the `pocketDepth` guards are gone; the
+  `cornerRadius >= pocketDepth` check is covered by the existing
+  `cornerFRoom = min(trayDepth, trayThickness)` room check; a 10mm minimum tray
+  thickness guard is added, using the flat Screwdriver Tray's own exported
+  constant. Edge clearance (5mm), hole gap (4mm), the 6.5mm plate-thickness
+  floor, the slot-fit guard and the tray-shorter-than-plate guard all carry
+  over unchanged.
+- Corner Radius: the plate's own top edge (corner D), the tray's own top edge
+  (corner F) and every bore's TOP rim. The L-junction (corner E) stays sharp as
+  before, and **every bore's BOTTOM rim is sharp** — no bottom fillet code in
+  the module.
+- Tests: `tests/unit/mountedScrewdriverTrayGeometry.test.ts` — 59 tests, and
+  `tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts` — 13 tests.
+  Coverage includes the manifold check, the exact directed-edge check over the
+  whole mesh, the dedicated inner-corner test isolating the plate-to-tray
+  junction line, bounding box, every validation guard, per-bore raycasts
+  asserting ZERO crossings, a between-bores solid-slab check, the
+  slot-channel-unobstructed check **re-run on this mesh at all 8 slots and 9
+  heights** plus the fused-junction and plate-stands-alone checks, and a
+  rounded-radius exported-STL raycast that also pins the bottom rim as sharp.
+- **Asymmetric mirror test:** a fixture with no two bores sharing an x or a z
+  and none at another's mirror image, asserting each bore's UN-mirrored
+  position is SOLID. The default insert cannot prove the mirror on its own —
+  viewed 30 / 120 / 210 maps onto the same set in geometry — so the suite also
+  pins it by diameter on the default insert.
+- Registered in the editor: a catalog entry in the OpenGrid section (colour
+  `#7c3aed`), and an inspector with Plate Width / Plate Height / Plate
+  Thickness / Slot Spacing / Slot Count / Tray Depth / Tray Thickness / Corner
+  Radius rows plus a per-hole Diameter / X / Z list (add / remove, inline
+  module error). **No Pocket Depth row.** Same eight-file registration pattern.
+- Default insert: the validated wrench-rack plate (240 × 60 × 10mm, 28mm
+  spacing, 8 slots at x = 22 … 218) with a 60mm-deep, 18mm-thick shelf and
+  three bores at 8 / 10 / 12mm, viewed x = 30 / 120 / 210 on the z = 30
+  centreline. The diameters are **generic placeholders**.
+- Verified hands-on by exporting the default insert through the real STL writer
+  and raycasting the **exported file**: 3,536 facets; 0 boundary and 0
+  non-manifold edges on the parsed-back file; all six bore samples returned an
+  EMPTY crossing list; five solid samples returned exactly
+  `[0.000000, 18.000000]`; all 8 slots read open at the mounting face and solid
+  at the blind floor at all 9 sampled heights, with all 7 between-slot
+  midpoints solid. The mirror was measured, not asserted: scanning x in 0.05mm
+  steps, the bore typed at viewed x = 30 (d = 8) opens from x = 206.05 to
+  213.95 — centre 210.00, width 7.90mm — and the bore typed at viewed x = 210
+  (d = 12) opens from x = 24.05 to 35.95, centre 30.00, width 11.90mm.
+- **No coupon STL and no generator script** — not approved; `test-prints/` was
+  untouched.
+- Status: **unvalidated and unprinted**, with no candidate file to print.
+
 ## Physical gate — both coupons are unprinted
 
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
@@ -240,6 +317,14 @@ terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Mounted Screwdriver Tray added: new geometry module, 72 tests across two new
+  files, and editor registration across the same eight files. One L-prism
+  solid, slotted plate plus a bored forward shelf; through-bores instead of
+  blind pockets, with the bottom face now carrying both bore holes and slot
+  notches on one earcut cap. Hole x mirrored into geometry space at one marked
+  spot. Pocket Depth removed entirely; 10mm minimum tray thickness; bottom rim
+  sharp. All three earlier trays byte-identical and asserted so by a
+  registration test; no coupon STL or generator script.
 - Flat Screwdriver Tray added: new geometry module, 59 tests across two new
   files, and editor registration across the same eight files the socket trays
   used. Through-holes instead of blind pockets — no floor cap, wall spans the
@@ -388,14 +473,18 @@ followed the same three steps and is the tag now deployed.
 
 ## Test suite
 
-475 unit tests passing across 51 files (`npm test`, 2026-09-07), of which
+547 unit tests passing across 53 files (`npm test`, 2026-09-07), of which
 36 are in `tests/unit/socketTrayGeometry.test.ts`, 8 in
 `tests/unit/socketTrayShapeRegistration.test.ts`, 57 in
 `tests/unit/mountedSocketTrayGeometry.test.ts`, 13 in
 `tests/unit/mountedSocketTrayShapeRegistration.test.ts`, 50 in
-`tests/unit/screwdriverTrayGeometry.test.ts` and 9 in
-`tests/unit/screwdriverTrayShapeRegistration.test.ts`. The four socket-tray
-files still total 114 and were not modified. `npm run typecheck` is clean.
+`tests/unit/screwdriverTrayGeometry.test.ts`, 9 in
+`tests/unit/screwdriverTrayShapeRegistration.test.ts`, 59 in
+`tests/unit/mountedScrewdriverTrayGeometry.test.ts` and 13 in
+`tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts`. The four
+socket-tray files still total 114 and the two flat-screwdriver files 59; none
+of the six were modified by the mounted screwdriver pass. `npm run typecheck`
+is clean.
 
 ## Printers
 
