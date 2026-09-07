@@ -158,6 +158,72 @@ and remains the test piece.
 - Full detail: `reference/reports/socket-tray-mounted-recon.md`,
   `reference/reports/mounted-socket-tray-build.md`.
 
+## Screwdriver Tray (flat) — built and registered, unprinted
+
+The through-hole sibling of the flat Socket Tray: a screwdriver's shaft passes
+all the way through and its handle rests on the top face, so a hole has no
+floor and there is no Pocket Depth anywhere in the shape. Built as Pass A of a
+two-pass plan; the MOUNTED Screwdriver Tray is a separate later pass and
+nothing was built for it. Both Socket Trays are unchanged by this work.
+
+- Module: `apps/web/src/lib/screwdriverTrayGeometry.ts` — new sibling
+  primitive, additive only. `socketTrayGeometry.ts` was not edited, only
+  imported from (`SOCKET_TRAY_POCKET_EDGE_CLEARANCE`,
+  `SOCKET_TRAY_POCKET_GAP`, `SOCKET_TRAY_POCKET_SEGMENTS`,
+  `SOCKET_TRAY_FILLET_SEGMENTS`). Boundary-rep only, no CSG, no baked mesh.
+- What differs from the flat Socket Tray, and nothing else does: no floor cap
+  is emitted at all; the cylindrical wall spans the full tray thickness (top
+  face to Y = 0) instead of stopping at a floor plane; and the BOTTOM face is
+  an earcut cap notched with one hole per bore, where the socket tray's bottom
+  face is a plain uncut rectangle by construction. Both notches and the wall
+  reuse the same ring point objects, so both seams are bit-identical (the
+  exact-stitch contract) — pinned by an exact directed-edge test.
+- Guards: the floor-thickness guard and both pocket-depth guards are gone; the
+  socket tray's `cornerRadius >= pocket.depth` check collapses into the
+  tray-thickness check that already existed; a new
+  `MIN_SCREWDRIVER_TRAY_THICKNESS = 10` guard is added. Edge clearance (5mm)
+  and hole gap (4mm) carry over unchanged as the same imported constants.
+- Corner Radius: same owner-typed field and same mitered quarter-arc technique
+  as both socket trays, rounding the tray's outer top perimeter and every
+  hole's TOP rim. **The bottom rim is sharp** and there is no bottom fillet
+  code in the module — see DECISIONS.md.
+- Tests: `tests/unit/screwdriverTrayGeometry.test.ts` — 50 tests, and
+  `tests/unit/screwdriverTrayShapeRegistration.test.ts` — 9 tests. Coverage
+  includes the manifold check, the exact directed-edge check, bounding box,
+  every validation guard, per-hole raycasts asserting ZERO crossings on a
+  bore's axis (open top to bottom, the inverse of the socket tray's
+  open-to-floor/solid-below assertion), a between-holes solid-slab check, a
+  dedicated tightest-accepted-gap check (two 12mm bores 16.1mm apart, 0.1mm
+  above the pairwise minimum, with the 0.1mm-tighter case asserted to throw),
+  and a rounded-radius exported-STL raycast that also pins the bottom rim as
+  sharp (material reaches Y = 0 at a radius the top rim has already opened).
+- **Asymmetric layout test:** a dedicated fixture with no two holes sharing an
+  x or a z and none at another's mirror image, plus explicit assertions that
+  each hole's image about the width centreline and about its own z is SOLID.
+  This exists because the mounted tray's pocket-X mirror bug was invisible to
+  every geometry check and to a symmetric layout (KNOWN-FIXES.md).
+- Registered in the editor: a catalog entry in the OpenGrid section (colour
+  `#db2777`, box-icon stand-in like every other OpenGrid shape), and an
+  inspector with Width / Depth / Thickness / Corner Radius rows plus a
+  per-hole Diameter / X / Z list (add / remove, inline module error).
+  **No Pocket Depth row.** Same eight-file registration pattern both socket
+  trays used; neither socket tray's geometry module was edited.
+- Default insert: 240 × 60 × 18mm with three through-holes at 8 / 10 / 12mm,
+  x = 30 / 120 / 210 on the z = 30 centreline (30mm end margins, 90mm pitch).
+  The diameters are **generic placeholders**, not measured shafts — see
+  DECISIONS.md.
+- Verified hands-on by exporting the default insert through the real STL
+  writer (`exportMeshesToStl`) and raycasting the **exported file**, not the
+  in-memory mesh: 792 facets, bounding box 0..240 × −60..0 × 0..18 in file
+  (Z-up) coordinates. All six bore samples (each hole's axis plus an off-axis
+  point at 60% of its radius) returned an EMPTY crossing list — open all the
+  way through. All five solid samples (between bores 1–2 and 2–3, 0.5mm
+  outside a rim, and in front of / behind the hole row) returned exactly
+  `[0.000000, 18.000000]`.
+- **No coupon STL and no generator script** — not approved for this pass;
+  `test-prints/` was untouched.
+- Status: **unvalidated and unprinted**, with no candidate file to print.
+
 ## Physical gate — both coupons are unprinted
 
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
@@ -174,6 +240,13 @@ terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Flat Screwdriver Tray added: new geometry module, 59 tests across two new
+  files, and editor registration across the same eight files the socket trays
+  used. Through-holes instead of blind pockets — no floor cap, wall spans the
+  full thickness, bottom face notched with the same holes as the top. Pocket
+  Depth removed entirely from the shape; new 10mm minimum thickness guard;
+  bottom rim sharp. Both Socket Trays untouched and asserted so by a
+  registration test; no coupon STL or generator script.
 - **Released as `1.3.0` and live on Unraid.** The release carries the
   Mounted Socket Tray pocket-X mirror fix (`3f5aba8`) plus the version bump
   (`feea3e7`); GitHub Actions built and published the image on the push, and
@@ -315,11 +388,14 @@ followed the same three steps and is the tag now deployed.
 
 ## Test suite
 
-416 unit tests passing across 49 files (`npm test`, 2026-09-06), of which
+475 unit tests passing across 51 files (`npm test`, 2026-09-07), of which
 36 are in `tests/unit/socketTrayGeometry.test.ts`, 8 in
 `tests/unit/socketTrayShapeRegistration.test.ts`, 57 in
-`tests/unit/mountedSocketTrayGeometry.test.ts` and 13 in
-`tests/unit/mountedSocketTrayShapeRegistration.test.ts`.
+`tests/unit/mountedSocketTrayGeometry.test.ts`, 13 in
+`tests/unit/mountedSocketTrayShapeRegistration.test.ts`, 50 in
+`tests/unit/screwdriverTrayGeometry.test.ts` and 9 in
+`tests/unit/screwdriverTrayShapeRegistration.test.ts`. The four socket-tray
+files still total 114 and were not modified. `npm run typecheck` is clean.
 
 ## Printers
 

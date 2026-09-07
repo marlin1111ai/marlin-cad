@@ -42,6 +42,14 @@ import {
 } from "@/lib/multiconnectContainerGeometry";
 import { MULTICONNECT_PRESETS, multiconnectPresetById } from "@/lib/multiconnectPresets";
 import {
+  createScrewdriverTrayGeometry,
+  DEFAULT_SCREWDRIVER_TRAY_CORNER_RADIUS,
+  MIN_SCREWDRIVER_TRAY_THICKNESS,
+  screwdriverTrayDimensions,
+  screwdriverTrayPositions,
+  type ScrewdriverTrayOptions,
+} from "@/lib/screwdriverTrayGeometry";
+import {
   createSocketTrayGeometry,
   DEFAULT_SOCKET_TRAY_CORNER_RADIUS,
   MIN_SOCKET_TRAY_FLOOR_THICKNESS,
@@ -52,7 +60,7 @@ import {
   type SocketTrayOptions,
 } from "@/lib/socketTrayGeometry";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
-import type { MountedSocketTrayShapePocket, ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
+import type { MountedSocketTrayShapePocket, ScrewdriverTrayShapeHole, ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
 
@@ -100,6 +108,12 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // one catalog entry in the OpenGrid section; the pocket list is edited in
   // the inspector (MountedSocketTrayPocketCard).
   { id: "mounted-socket-tray", name: "Mounted Socket Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "mountedSocketTray", color: "#0ea5a4", category: OPENGRID_CATEGORY },
+  // Screwdriver Tray: the through-hole sibling of the flat Socket Tray above
+  // -- the shaft passes through and the handle rests on top, so there is no
+  // pocket floor and no Pocket Depth row. Same box-icon stand-in, one catalog
+  // entry in the OpenGrid section; the hole list is edited in the inspector
+  // (ScrewdriverTrayHoleCard).
+  { id: "screwdriver-tray", name: "Screwdriver Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "screwdriverTray", color: "#db2777", category: OPENGRID_CATEGORY },
   // Built-in parts library (multiconnectPresets.ts): each preset is a normal
   // multiconnectContainer entry whose presetId makes makeShapeFromAsset
   // pre-fill the inserted shape. Presets group under their own labeled
@@ -204,6 +218,92 @@ export function socketTrayLayoutError(shape: WorkplaneShape): string | null {
     if (floor) return `Pocket Depth leaves less than the ${MIN_SOCKET_TRAY_FLOOR_THICKNESS}mm minimum floor — reduce Pocket Depth or increase Thickness.`;
     const invalid = message.match(/pocket (\d+): diameter/);
     if (invalid) return `Pocket ${Number(invalid[1]) + 1} has invalid values.`;
+    return message;
+  }
+}
+
+// Insert defaults for the Screwdriver Tray: 240 x 60 x 18mm -- the same
+// footprint and thickness the flat Socket Tray's coupon uses -- with three
+// through-holes on the z = 30 centreline at 30mm end margins, so the pitch is
+// (240 - 30 - 30) / 2 = 90mm and the centers land at 30 / 120 / 210.
+//
+// The 8 / 10 / 12mm diameters are DELIBERATE GENERIC PLACEHOLDERS chosen by
+// the owner as a starting point, not measured screwdriver shafts and not a
+// validated recipe. That is the difference from the Socket Tray's defaults,
+// whose diameters are caliper-measured socket ODs plus a stated 2mm
+// clearance. The owner types the finished hole size here the same way they do
+// there; nothing in the app looks a screwdriver size up.
+export const DEFAULT_SCREWDRIVER_TRAY_SHAPE_HOLES: ReadonlyArray<ScrewdriverTrayShapeHole> = [
+  { diameter: 8, x: 30, z: 30 },
+  { diameter: 10, x: 120, z: 30 },
+  { diameter: 12, x: 210, z: 30 },
+];
+
+// The single shape -> geometry-options mapping for the Screwdriver Tray: the
+// viewport arm, the editor's export arm, and the inspector's validation all
+// go through this. Same axis rule as the flat Socket Tray -- tray width ->
+// shape.width, tray depth -> shape.depth, tray thickness -> shape.height (the
+// app's Y-up dimension). There is no depth field to map: the bores go all the
+// way through.
+export function screwdriverTrayOptionsForShape(shape: WorkplaneShape): ScrewdriverTrayOptions {
+  return {
+    width: shapeWidth(shape),
+    depth: shapeDepth(shape),
+    thickness: shape.height,
+    cornerRadius: shape.screwdriverTrayCornerRadius,
+    holes: (shape.screwdriverTrayHoles ?? []).map((hole) => ({ diameter: hole.diameter, x: hole.x, z: hole.z })),
+  };
+}
+
+// The geometry module THROWS on an invalid hole layout (its callers are
+// expected to validate). The render/export arms must never crash on a
+// half-edited layout, so they fall back to the bare tray (no holes), then to
+// sharp, then to the module's own defaults -- the tray thickness itself can be
+// rejected here, which the Socket Tray's equivalent cannot, because this
+// module enforces a 10mm minimum. The inspector shows the validation message
+// inline instead (screwdriverTrayLayoutError).
+export function createScrewdriverTrayGeometryForShape(shape: WorkplaneShape) {
+  const options = screwdriverTrayOptionsForShape(shape);
+  try {
+    return createScrewdriverTrayGeometry(options);
+  } catch {
+    try {
+      return createScrewdriverTrayGeometry({ ...options, holes: [] });
+    } catch {
+      try {
+        return createScrewdriverTrayGeometry({ ...options, cornerRadius: 0, holes: [] });
+      } catch {
+        return createScrewdriverTrayGeometry({});
+      }
+    }
+  }
+}
+
+// Friendly inline message for the inspector: null when the layout is valid,
+// otherwise the geometry module's rejection translated to 1-based hole numbers
+// and plain language. Runs even with zero holes, since a corner radius too
+// large for the tray's own footprint/thickness -- or a sub-minimum thickness
+// -- throws with no holes involved at all.
+export function screwdriverTrayLayoutError(shape: WorkplaneShape): string | null {
+  const options = screwdriverTrayOptionsForShape(shape);
+  try {
+    screwdriverTrayPositions(options);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const widensEdge = message.match(/corner radius .*widens hole (\d+) .* edge/);
+    if (widensEdge) return `Corner Radius widens Hole ${Number(widensEdge[1]) + 1} to within ${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm of the tray edge — reduce Corner Radius or move the hole.`;
+    const widensNeighbor = message.match(/corner radius .*widens hole (\d+) .* hole (\d+)/);
+    if (widensNeighbor) return `Corner Radius widens Hole ${Number(widensNeighbor[1]) + 1} too close to Hole ${Number(widensNeighbor[2]) + 1} — reduce Corner Radius or space the holes further apart.`;
+    if (/corner radius .*footprint/.test(message)) return "Corner Radius is too large for the tray's own footprint — reduce Corner Radius, or increase Width/Depth.";
+    if (/corner radius .*straight wall/.test(message)) return "Corner Radius is too large for the tray's own Thickness — reduce Corner Radius or increase Thickness.";
+    const overlap = message.match(/holes (\d+) and (\d+): footprints overlap/);
+    if (overlap) return `Holes ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${SOCKET_TRAY_POCKET_GAP}mm between them.`;
+    const edge = message.match(/hole (\d+): footprint .* edge/);
+    if (edge) return `Hole ${Number(edge[1]) + 1} is too close to the tray edge (${SOCKET_TRAY_POCKET_EDGE_CLEARANCE}mm clearance is required).`;
+    if (/below the .*minimum/.test(message)) return `Thickness must be at least ${MIN_SCREWDRIVER_TRAY_THICKNESS}mm — the hole goes all the way through, so the tray needs enough depth to hold a shaft upright.`;
+    const invalid = message.match(/hole (\d+): diameter/);
+    if (invalid) return `Hole ${Number(invalid[1]) + 1} has invalid values.`;
     return message;
   }
 }
@@ -455,14 +555,15 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   // Socket Tray: width/depth/thickness straight from the module's defaults;
   // thickness is the Y-up dimension, so it becomes shape.height.
   const socketTrayDefaults = asset.kind === "socketTray" ? socketTrayDimensions({}) : undefined;
+  const screwdriverTrayDefaults = asset.kind === "screwdriverTray" ? screwdriverTrayDimensions({}) : undefined;
   // Mounted Socket Tray: plate width/height straight from the module's
   // defaults; `depth` is the solid's full Z extent (tray projection + plate
   // thickness), so the selection frame matches the mesh.
   const mountedSocketTrayDefaults = asset.kind === "mountedSocketTray" ? mountedSocketTrayDimensions({}) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.height : openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.width : openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.depth : openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.height : openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : screwdriverTrayDefaults ? screwdriverTrayDefaults.thickness : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.width : openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : screwdriverTrayDefaults ? screwdriverTrayDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.depth : openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : screwdriverTrayDefaults ? screwdriverTrayDefaults.depth : asset.kind === "text" ? 28 : size;
 
   const shape: WorkplaneShape = {
     id: createLocalId(asset.id),
@@ -528,6 +629,8 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     socketTrayPocketDepth: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH : undefined,
     socketTrayPockets: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_SHAPE_POCKETS.map((pocket) => ({ ...pocket })) : undefined,
     socketTrayCornerRadius: asset.kind === "socketTray" ? DEFAULT_SOCKET_TRAY_CORNER_RADIUS : undefined,
+    screwdriverTrayHoles: asset.kind === "screwdriverTray" ? DEFAULT_SCREWDRIVER_TRAY_SHAPE_HOLES.map((hole) => ({ ...hole })) : undefined,
+    screwdriverTrayCornerRadius: asset.kind === "screwdriverTray" ? DEFAULT_SCREWDRIVER_TRAY_CORNER_RADIUS : undefined,
     mountedTrayPlateThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS : undefined,
     mountedTraySlotSpacing: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING : undefined,
     mountedTraySlotCount: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT : undefined,

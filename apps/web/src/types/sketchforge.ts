@@ -23,7 +23,8 @@ export type ShapeKind =
   | "openGridSnap"
   | "multiconnectContainer"
   | "socketTray"
-  | "mountedSocketTray";
+  | "mountedSocketTray"
+  | "screwdriverTray";
 
 export type ShapeAsset = {
   id: string;
@@ -163,6 +164,14 @@ export type SocketTrayShapePocket = { diameter: number; x: number; z: number };
 // mountedSocketTrayGeometry.ts. Depth is shared across pockets
 // (mountedTrayPocketDepth), not per row.
 export type MountedSocketTrayShapePocket = { diameter: number; x: number; z: number };
+
+// One hole row in the inspector's Screwdriver Tray hole list. Same meaning as
+// SocketTrayShapePocket's x/z -- the hole center in the tray's own geometry
+// space (x from the left edge, z from the front edge); the tray lies flat, so
+// there is no as-mounted mirror. Unlike either Socket Tray there is NO depth,
+// shared or per-row: the bore goes all the way through, so its depth is the
+// tray thickness.
+export type ScrewdriverTrayShapeHole = { diameter: number; x: number; z: number };
 
 export type SketchRevolveSettings = {
   startAngle: number;
@@ -311,6 +320,15 @@ export type WorkplaneShape = {
   // tray's own top edge, and every pocket rim. 0 (default) = sharp. Never
   // applied to the L-junction.
   mountedTrayCornerRadius?: number;
+  // Screwdriver Tray (kind "screwdriverTray"). Tray width / depth / thickness
+  // live in width / depth / height (thickness is the Y-up dimension), exactly
+  // as on the flat Socket Tray. There is deliberately no pocket-depth field:
+  // the holes are through-bores.
+  screwdriverTrayHoles?: ScrewdriverTrayShapeHole[];
+  // Owner-typed fillet radius, applied to the tray's outer top perimeter and
+  // every hole's TOP rim. 0 (default) = sharp. The bottom rim is always
+  // sharp.
+  screwdriverTrayCornerRadius?: number;
   text?: string;
   font?: string;
   importedMesh?: {

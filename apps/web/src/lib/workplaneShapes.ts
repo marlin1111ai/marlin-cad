@@ -135,6 +135,7 @@ export function fallbackSolidColor(shape: WorkplaneShape) {
   if (shape.kind === "multiconnectContainer") return "#9b3bd2";
   if (shape.kind === "socketTray") return "#3b82f6";
   if (shape.kind === "mountedSocketTray") return "#0ea5a4";
+  if (shape.kind === "screwdriverTray") return "#db2777";
   return "#d41721";
 }
 
@@ -253,6 +254,8 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.mountedTrayPocketDepth === b.mountedTrayPocketDepth &&
     a.mountedTrayPockets === b.mountedTrayPockets &&
     a.mountedTrayCornerRadius === b.mountedTrayCornerRadius &&
+    a.screwdriverTrayHoles === b.screwdriverTrayHoles &&
+    a.screwdriverTrayCornerRadius === b.screwdriverTrayCornerRadius &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&

@@ -34,6 +34,7 @@ import { createOpenGridBoardGeometry } from "@/lib/openGridGeometry";
 import { createOpenConnectContainerGeometry } from "@/lib/openConnectContainerGeometry";
 import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
 import { createMountedSocketTrayGeometryForShape } from "@/lib/shapeCatalog";
+import { createScrewdriverTrayGeometryForShape } from "@/lib/shapeCatalog";
 import { createMulticonnectGeometryForShape, createSocketTrayGeometryForShape } from "@/lib/shapeCatalog";
 import {
   horizontalPlacementWorkplane,
@@ -979,6 +980,8 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     mountedTrayPocketDepth: shape.mountedTrayPocketDepth,
     mountedTrayPockets: shape.mountedTrayPockets,
     mountedTrayCornerRadius: shape.mountedTrayCornerRadius,
+    screwdriverTrayHoles: shape.screwdriverTrayHoles,
+    screwdriverTrayCornerRadius: shape.screwdriverTrayCornerRadius,
     text: shape.text,
     font: shape.font,
   });
@@ -7275,6 +7278,11 @@ function createShapeObject(
       // mapping-helper pattern, same bare-tray fallback on an invalid layout.
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createMountedSocketTrayGeometryForShape(shape)), material, shape);
       break;
+    case "screwdriverTray":
+      // The through-hole tray: same mapping-helper pattern as socketTray
+      // above, same bare-tray fallback on an invalid mid-edit hole layout.
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createScrewdriverTrayGeometryForShape(shape)), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7393,7 +7401,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer", "socketTray", "mountedSocketTray"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer", "socketTray", "mountedSocketTray", "screwdriverTray"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {
