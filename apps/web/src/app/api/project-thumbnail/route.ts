@@ -10,6 +10,29 @@ const PNG_DATA_URL_PREFIX = "data:image/png;base64,";
 const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
 const MAX_THUMBNAIL_REQUEST_BYTES = Math.ceil((MAX_THUMBNAIL_BYTES * 4) / 3) + PNG_DATA_URL_PREFIX.length + 2048;
 
+// The dashboard is opened over the LAN (e.g. http://192.168.1.250:3001/), not
+// only at localhost, so thumbnails have to be readable and writable from
+// private-network addresses too. Public addresses and host NAMES stay
+// rejected: only literal IPv4 in 10/8, 172.16/12 and 192.168/16 is allowed.
+const IPV4_HOSTNAME = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+function isPrivateIpv4Hostname(hostname: string) {
+  const match = IPV4_HOSTNAME.exec(hostname);
+  if (!match) {
+    return false;
+  }
+  const octets = match.slice(1, 5).map((part) => Number(part));
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [first, second] = octets;
+  return first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168);
+}
+
+function isAllowedThumbnailHostname(hostname: string) {
+  return LOCAL_HOSTS.has(hostname) || isPrivateIpv4Hostname(hostname);
+}
+
 function safeProjectId(projectId: string) {
   const clean = projectId.replace(/[^a-zA-Z0-9_-]/g, "");
   return clean || null;
@@ -25,7 +48,7 @@ function thumbnailPath(projectId: string) {
 
 function isLocalSameOriginRequest(request: Request) {
   const requestUrl = new URL(request.url);
-  if (!LOCAL_HOSTS.has(requestUrl.hostname)) {
+  if (!isAllowedThumbnailHostname(requestUrl.hostname)) {
     return false;
   }
 
@@ -33,7 +56,7 @@ function isLocalSameOriginRequest(request: Request) {
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (!LOCAL_HOSTS.has(originUrl.hostname) || originUrl.port !== requestUrl.port || originUrl.protocol !== requestUrl.protocol) {
+      if (!isAllowedThumbnailHostname(originUrl.hostname) || originUrl.port !== requestUrl.port || originUrl.protocol !== requestUrl.protocol) {
         return false;
       }
     } catch {
