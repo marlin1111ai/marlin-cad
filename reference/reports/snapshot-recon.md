@@ -3,6 +3,11 @@
 Date: 2026-09-09. Branch `main` at `6072323`. No file was edited; this
 report is the only new file.
 
+**Amended 2026-09-09** — section 5's explanation of *why* the LAN request
+returns 403 was wrong and now carries a dated correction in place; the
+original wording is preserved above it. Section 5 open question 2 is
+marked RESOLVED. Everything else in this report stood up.
+
 **Bottom line:** the snapshot pipeline is fully built and fully wired, but
 it is entirely **automatic** — there is no button, menu item, or any other
 UI control anywhere that captures a snapshot. The user cannot ask for one;
@@ -413,6 +418,36 @@ it.
    `page.tsx:825-829` swallows it, `thumbnailUrl` stays null, and every
    card reads "No snapshot yet" permanently. I traced this from the code;
    I did **not** test it against the running Unraid container.
+
+   > **CORRECTED 2026-09-09 — the 403 is real, but this explanation of its
+   > cause is wrong.** The paragraph above is left as written, per the
+   > project's rule that a wrong entry gets a dated correction rather than
+   > a rewrite. The outcome it predicts is right: nothing is ever written
+   > from Unraid. The mechanism is not.
+   >
+   > `requestUrl` is `new URL(request.url)`, and Next derives `request.url`
+   > from the address the **server bound to**, never from the client's Host
+   > header. Measured on a running dev server: a browser request to
+   > `http://192.168.1.245:3100/` arrives as
+   > `request.url = http://0.0.0.0:3100/api/project-thumbnail`, hostname
+   > `0.0.0.0`, while the Host header separately reads
+   > `192.168.1.245:3100`. The container sets `HOSTNAME=0.0.0.0`
+   > (`deploy/docker/Dockerfile:24`), so the hostname tested there is
+   > **always the literal string `0.0.0.0`** — not the LAN IP, not a
+   > hostname, and not anything the client can influence. Confirmed by
+   > running the standalone production build exactly as the container does.
+   >
+   > There is a second, independent blocker the original text missed
+   > entirely: Unraid publishes host port 3001 onto container port 3000
+   > (`deploy/docker/compose-ghcr.yaml:5`), so even with the hostname
+   > fixed, `originUrl.port` (`3001`, from the browser) could never equal
+   > `requestUrl.port` (`3000`, from the bind), and the Origin comparison
+   > would still refuse every request.
+   >
+   > Both are fixed together by reading the Host header, which carries the
+   > real address *and* the published port (`192.168.1.250:3001`). Owner
+   > ruled on 2026-09-09; see the guard in `route.ts` and
+   > `tests/unit/projectThumbnailOrigin.test.ts`.
 2. **Shared projects never get one at all.** `page.tsx:1716` renders
    `<ProjectPreview accent={...} />` with no `thumbnailUrl` argument, so
    the shared-library cards always show the empty state by construction.
@@ -481,6 +516,13 @@ clean, or with the dev server having run from `apps/web`.
    security-relevant change to a write endpoint that accepts 5 MiB of
    attacker-controlled bytes and a path-derived filename, so I am not
    proposing a shape for it here.
+   **RESOLVED 2026-09-09** — the owner ruled: accept private-LAN IPv4
+   (10/8, 172.16/12, 192.168/16) plus localhost across all three verbs,
+   sourcing host and port from the Host header. Only this route's copy
+   changed; `local-download` and `codex-screenshot` keep their own
+   localhost-only copies. See the correction under section 5 for why the
+   first attempt at this fix (`6ae02f7`, released as nothing) was a no-op
+   in the container.
 3. **Snapshots are not on a persistent volume.** Even with the 403 fixed,
    `.codex/project-thumbnails` under the standalone cwd is lost on every
    container recreate. Should the directory move under `/data`

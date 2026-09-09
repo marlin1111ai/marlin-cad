@@ -48,7 +48,28 @@ function thumbnailPath(projectId: string) {
 
 function isLocalSameOriginRequest(request: Request) {
   const requestUrl = new URL(request.url);
-  if (!isAllowedThumbnailHostname(requestUrl.hostname)) {
+
+  // `request.url` carries the address the SERVER bound to, not the one the
+  // browser asked for: the container binds 0.0.0.0 and Unraid publishes host
+  // port 3001 straight onto container port 3000, so request.url is
+  // http://0.0.0.0:3000 for a browser that typed http://192.168.1.250:3001.
+  // The Host header is the only place the real address and port appear, so
+  // both the range check and the Origin comparison read it. There is no
+  // reverse proxy in front of the container, so X-Forwarded-* is deliberately
+  // not consulted. A request with no Host at all is refused.
+  const hostHeader = request.headers.get("host");
+  if (!hostHeader) {
+    return false;
+  }
+
+  let hostUrl: URL;
+  try {
+    hostUrl = new URL(`${requestUrl.protocol}//${hostHeader}`);
+  } catch {
+    return false;
+  }
+
+  if (!isAllowedThumbnailHostname(hostUrl.hostname)) {
     return false;
   }
 
@@ -56,7 +77,9 @@ function isLocalSameOriginRequest(request: Request) {
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (!isAllowedThumbnailHostname(originUrl.hostname) || originUrl.port !== requestUrl.port || originUrl.protocol !== requestUrl.protocol) {
+      // `host` is hostname plus port, so this pins the Origin to the very
+      // address the browser used, published port included.
+      if (!isAllowedThumbnailHostname(originUrl.hostname) || originUrl.host !== hostUrl.host || originUrl.protocol !== requestUrl.protocol) {
         return false;
       }
     } catch {
