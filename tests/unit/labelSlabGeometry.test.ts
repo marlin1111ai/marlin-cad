@@ -404,25 +404,55 @@ describe("test-prints/label-test-piece.stl", () => {
     let strokeSamples = 0;
     let counterSamples = 0;
     let flatSamples = 0;
-    for (const label of layout.labels) {
-      // Non-vertical triangles whose plan bounding box touches this cell.
-      const triangles: number[][] = [];
-      for (let i = 0; i + 8 < filePositions.length; i += 9) {
-        const t = filePositions.slice(i, i + 9);
-        const denom = (t[5] - t[8]) * (t[0] - t[6]) + (t[6] - t[3]) * (t[2] - t[8]);
-        if (Math.abs(denom) < 1e-12) continue;
-        if (Math.max(t[0], t[3], t[6]) < label.cellMinX || Math.min(t[0], t[3], t[6]) > label.cellMaxX) continue;
-        if (Math.max(t[2], t[5], t[8]) < label.cellMinZ || Math.min(t[2], t[5], t[8]) > label.cellMaxZ) continue;
-        triangles.push(t);
-      }
+
+    // The file's triangles are filtered ONCE, not once per label: one pass
+    // drops the vertical ones (walls -- a vertical ray never crosses them)
+    // and hands each of the rest to every cell its plan bounding box
+    // touches, in file order.
+    const cellTriangles: number[][][] = layout.labels.map(() => []);
+    for (let i = 0; i + 8 < filePositions.length; i += 9) {
+      const p = filePositions;
+      const denom = (p[i + 5] - p[i + 8]) * (p[i] - p[i + 6]) + (p[i + 6] - p[i + 3]) * (p[i + 2] - p[i + 8]);
+      if (Math.abs(denom) < 1e-12) continue;
+      const minX = Math.min(p[i], p[i + 3], p[i + 6]);
+      const maxX = Math.max(p[i], p[i + 3], p[i + 6]);
+      const minZ = Math.min(p[i + 2], p[i + 5], p[i + 8]);
+      const maxZ = Math.max(p[i + 2], p[i + 5], p[i + 8]);
+      let triangle: number[] | null = null;
+      layout.labels.forEach((label, index) => {
+        if (maxX < label.cellMinX || minX > label.cellMaxX) return;
+        if (maxZ < label.cellMinZ || minZ > label.cellMaxZ) return;
+        triangle ??= p.slice(i, i + 9);
+        cellTriangles[index].push(triangle);
+      });
+    }
+
+    layout.labels.forEach((label, labelIndex) => {
+      const triangles = cellTriangles[labelIndex];
+      // Each outline with its own bounding box: a sample further than
+      // KEEP_OFF_OUTLINE outside the box is further than that from the
+      // outline itself, so its distance need not be measured.
+      const glyphs = label.glyphs.map((glyph) => ({
+        glyph,
+        outlines: allLoops(glyph).map((loop) => ({
+          loop,
+          minX: Math.min(...loop.map((point) => point[0])) - KEEP_OFF_OUTLINE,
+          maxX: Math.max(...loop.map((point) => point[0])) + KEEP_OFF_OUTLINE,
+          minZ: Math.min(...loop.map((point) => point[1])) - KEEP_OFF_OUTLINE,
+          maxZ: Math.max(...loop.map((point) => point[1])) + KEEP_OFF_OUTLINE,
+        })),
+      }));
       let labelStrokeSamples = 0;
       for (let x = label.cellMinX + 0.0137; x < label.cellMaxX; x += STEP) {
         for (let z = label.cellMinZ + 0.0071; z < label.cellMaxZ; z += STEP) {
           let nearOutline = false;
           let inStroke = false;
           let inCounter = false;
-          for (const glyph of label.glyphs) {
-            for (const loop of allLoops(glyph)) if (distanceToLoop(loop, x, z) < KEEP_OFF_OUTLINE) nearOutline = true;
+          for (const { glyph, outlines } of glyphs) {
+            for (const outline of outlines) {
+              if (x < outline.minX || x > outline.maxX || z < outline.minZ || z > outline.maxZ) continue;
+              if (distanceToLoop(outline.loop, x, z) < KEEP_OFF_OUTLINE) nearOutline = true;
+            }
             if (pointInLoop(glyph.outer, x, z)) {
               if (glyph.holes.some((hole) => pointInLoop(hole, x, z))) inCounter = true;
               else inStroke = true;
@@ -458,11 +488,14 @@ describe("test-prints/label-test-piece.stl", () => {
       }
       // Not vacuous: every label's strokes were actually sampled.
       expect(labelStrokeSamples, `"${label.text}" ${label.style} stroke samples`).toBeGreaterThan(100);
-    }
+    });
     expect(strokeSamples).toBeGreaterThan(5000);
     expect(counterSamples).toBeGreaterThan(100);
     expect(flatSamples).toBeGreaterThan(20000);
-  });
+    // Explicit timeout, a backstop only: this test takes about 1.4s on the
+    // dev box, and the GitHub CI runner is slower -- at about 2.2s here it
+    // overran vitest's 5s default there (CLAUDE-LESSONS.md, 2026-09-27).
+  }, 30_000);
 });
 
 describe("labelSlabLayout: validation", () => {

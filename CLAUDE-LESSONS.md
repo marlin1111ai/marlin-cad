@@ -135,3 +135,14 @@ of the contour's own points.
 floor. Fixed by comparing a sum instead: `thickness < 2 + 0.8`, where
 `2 + 0.8` is exactly `2.8`. Found by a unit test placed on the limit
 itself (`labelSlabGeometry.ts`, the recessed-label floor guard).
+
+## 2026-09-27 — The CI runner is slower than the dev box; check CI's result after every push
+
+A test near vitest's 5s default passed locally but timed out in CI. The
+GitHub CI runner is slower than the dev box: the label test piece's raycast
+test (`tests/unit/labelSlabGeometry.test.ts`) took about 2.2s here and
+overran 5000ms there, turning CI red on two pushes in a row (`742dcb1`,
+`e40575f`) while the full suite was green on the dev box. The Docker image
+workflow is not gated on CI, so a red CI still builds and re-points the
+version tag -- images were published from both commits. Lesson: check CI's
+result after every push.
