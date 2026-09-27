@@ -5,6 +5,12 @@ is the only new file. I cannot see the running container — everything
 below comes from the code and the image definition, and anything I could
 not confirm is marked.
 
+**Amended 2026-09-26** — dated notes added in place, originals kept:
+open question 5 RESOLVED (`1.3.3` deployed); section 4's "not inside the
+actual image" CONFIRMED by owner observation of thumbnails on the running
+container; section 6's four-project rescue CLOSED as not needed (the
+projects are backed up in the owner's slicer projects).
+
 ---
 
 ## Bottom line, before the detail
@@ -252,6 +258,12 @@ directory under `/app/apps/web` (section 7) is creatable by `node`. I
 verified the equivalent write succeeds when running the real standalone
 build locally, but **not inside the actual image**.
 
+> **CONFIRMED 2026-09-26 — by owner observation, not by inspecting the
+> image.** On the deployed `1.3.3` container the owner has seen thumbnails
+> on the project cards, which requires `node` to have created
+> `.codex/project-thumbnails` and written the PNG. Nobody looked inside the
+> container; this was confirmed by sight.
+
 ---
 
 ## 5. Every filesystem location a project can end up in
@@ -345,6 +357,12 @@ Until you have done this, **do not clear browser data, "clear site data"
 for that origin, or reset the browser profile** — that is the one action
 that would actually destroy these four projects.
 
+> **CLOSED 2026-09-26 — the rescue is not needed.** These four projects
+> are backed up in the owner's slicer projects, so they do not depend on
+> the browser profile alone. The steps above were not run and do not need
+> to be. The general warning still stands for any local project without a
+> copy elsewhere: clearing site data for the app's origin destroys it.
+
 ---
 
 ## 7. Do snapshots share this problem?
@@ -406,6 +424,10 @@ question below, not something I changed.
    403 today" describe 2026-09-09. That a snapshot now actually appears on
    the deployed container is not recorded; and, as section 7 says, the
    snapshots still vanish on recreate.
+   **UPDATE 2026-09-26** — it is now recorded: the owner has seen
+   thumbnails on the project cards of the running `1.3.3` container
+   (observation, not an image inspection; see section 4). They still vanish
+   on recreate.
 6. **Was the Aug 28 mtime the container recreate?** SESSION-STATE dates
    the second recreate to 2026-09-07 and the projects are dated Sep 7.
    An Aug 28 mtime on an empty directory suggests it was last touched

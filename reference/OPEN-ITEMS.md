@@ -2,7 +2,7 @@
 
 Unfinished threads, one line of status each.
 
-- **multiconnect.scad attribution** — upstream license/source unknown; owner to locate the source page. Attribution TODO in `reference/multiconnect.scad`.
+- **multiconnect.scad attribution** — upstream license/source of `reference/multiconnect.scad` unknown; owner to locate the source page. The `TODO(attribution)` markers are in `scripts/bake-multiconnect-slot.mjs` (two), `apps/web/src/lib/multiconnectContainerGeometry.ts` and `apps/web/src/lib/multiconnectSlotMesh.ts`, not in the `.scad` file itself (corrected 2026-09-26).
 - **Heavy board variant** — groove geometry is a flat-slab placeholder; Heavy is disabled in the UI until real geometry exists.
 - **OpenGrid loft follow-up** — loft-based fix for cosmetic non-manifold double-layer surfaces on connector holes/screw mounts; deferred, not started.
 - **Multiconnect Bin variant and on-ramps** — deferred.
@@ -30,3 +30,5 @@ Unfinished threads, one line of status each.
 - **Gridfinity label legibility unproven** — labels at 5mm height / 0.8mm depth need a print before any tray is built on them (slicer-slit-fusion risk; recon risk 2).
 - **Owner's reference Gridfinity STLs are a layout reference, not a size reference** — their generic hole diameters (17.60mm for a 6mm socket) disagree with the owner's own caliper-measured set (14mm for 5–6mm sockets).
 - **Stale next-server on port 3000 (pid 98055)** — a next-server running since roughly 2026-09-05 held port 3000 on the dev box and served stale code; no session killed it, owner to decide. **Closed as of 2026-09-26:** re-checked before recording — the box rebooted 2026-09-10 22:59, pid 98055 no longer exists, no next-server is running, and nothing listens on port 3000. Nothing left to decide.
+- **`.skf` files stamp a stale version** — `SKF_CREATED_WITH_VERSION` is still `"1.0.4"` (`apps/web/src/lib/skfProject.ts:15`) while the app is `1.3.3`, so every saved `.skf` records "created with 1.0.4". A hardcoded constant, not read from `package.json`; first noted in `reference/reports/release-1.1.0-publish.md` (open question 2).
+- **Corner rounding is mitered, not blended** — the Corner Radius fillet rounds the top perimeter edges only and meets at a straight miter at each vertical corner, not a smooth 3D blend. Whether to build fully blended corners (edge cylinders + corner spheres, a materially larger construction) was the rounding build's open question 1 (`reference/reports/socket-tray-rounding-build.md`, `4be03de`); it was never carried into this file until 2026-09-26. Owner's call.

@@ -338,9 +338,14 @@ terms, never a comparison against these frozen zero-radius files.
   version. Verified live on a standalone production build run the way the
   container runs it (`HOSTNAME=0.0.0.0`): POST / GET / DELETE with
   `Host: 192.168.1.250:3001` all returned 200 and the PNG came back
-  byte-identical. That verification was on the dev box; a thumbnail
-  actually appearing on the deployed Unraid container is not recorded here.
-  See DECISIONS.md for the guard and its tradeoff.
+  byte-identical. **Confirmed working on the deployed `1.3.3` container by
+  owner observation (2026-09-26):** the owner has seen thumbnails on the
+  project cards. That confirmation is by sight in the running app, not by
+  inspecting the image or the container's filesystem — but a thumbnail can
+  only be served back if the container's `node` user created
+  `.codex/project-thumbnails` and wrote the PNG, so it closes that
+  previously unconfirmed point too. See DECISIONS.md for the guard and its
+  tradeoff.
 - **`1.3.2` was built and pushed (`6ae02f7`) but never deployed**, because
   it was a no-op on Unraid: it widened the guard to private-LAN IPv4 but
   still tested `new URL(request.url)`, whose hostname in the container is
@@ -462,7 +467,8 @@ terms, never a comparison against these frozen zero-radius files.
   mapping, volume mapping and every other setting are as recorded above; only
   the image tag has moved forward, to `1.3.1` then, and to `1.3.3` since.
   See KNOWN-FIXES.md.
-- **Project thumbnails are NOT on the mapped volume.** The container writes
+- **Project thumbnails work on `1.3.3`** (owner observation, 2026-09-26)
+  **but are NOT on the mapped volume.** The container writes
   them to `/app/apps/web/.codex/project-thumbnails` (`process.cwd()` of the
   standalone server plus `.codex/project-thumbnails`, no env var), which is
   the container's disposable layer — every recreate discards them, and the

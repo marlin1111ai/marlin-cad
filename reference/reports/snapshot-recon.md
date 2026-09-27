@@ -8,6 +8,11 @@ returns 403 was wrong and now carries a dated correction in place; the
 original wording is preserved above it. Section 5 open question 2 is
 marked RESOLVED. Everything else in this report stood up.
 
+**Amended 2026-09-26** — section 6's "Traced but not confirmed" point
+(whether the container's `node` user can create the thumbnail directory)
+carries a dated confirmation in place: confirmed by owner observation of
+thumbnails on the running `1.3.3` container, not by inspecting the image.
+
 **Bottom line:** the snapshot pipeline is fully built and fully wired, but
 it is entirely **automatic** — there is no button, menu item, or any other
 UI control anywhere that captures a snapshot. The user cannot ask for one;
@@ -493,6 +498,15 @@ Traced but **not confirmed**: whether the `node` user can actually create
 should leave it node-owned, so `fs.mkdir` should succeed — but I did not
 run the image to verify, and the 403 fires before this code is reached
 anyway.
+
+> **CONFIRMED 2026-09-26 — by owner observation, not by inspecting the
+> image.** With `1.3.3` (the Host-header guard, `9e926bf`) deployed, the
+> owner has seen thumbnails on the project cards of the running Unraid
+> container. A card can only show one if the POST wrote the PNG and the GET
+> served it back, so the `node` user can create
+> `/app/apps/web/.codex/project-thumbnails/`. Nobody listed the directory
+> inside the container; this is confirmed by sight. The persistence problem
+> above (lost on every container recreate) is unchanged.
 
 In the local dev app (`localhost:3000`, `npm run dev` from the repo root),
 `process.cwd()` is the repo root, so the path is
