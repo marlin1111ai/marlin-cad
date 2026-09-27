@@ -3,6 +3,9 @@
 Date: 2026-09-25. Diagnose-only pass; no source file was modified, no
 dependency added, nothing built. This report is the only new file.
 
+**Amended 2026-09-26** — open question Q2 (the 0.8mm height discrepancy)
+is marked RESOLVED in place; the original question is preserved.
+
 Target (owner's brief): a fifth tray shape — Gridfinity socket tray, round
 blind pockets, a printed number label beside each pocket (engraved/raised
 choice), owner-typed hole diameters, NO magnet pockets. Reference numbers:
@@ -341,6 +344,12 @@ What the new shape strains:
   behavior)? This is the largest unsettled design decision.
 - **Q2 — The 0.8mm height discrepancy.** 19.55mm measured vs 18.75mm
   decomposed (risk 3). What occupies the top 0.8mm in the reference?
+  **RESOLVED 2026-09-26** — the owner identified it: the 0.8mm is the
+  raised label depth, sitting proud of the 18.75mm tray top (18.75 + 0.8 =
+  19.55). The reference exports therefore use raised labels, and their
+  overall height includes the labels. Risk 3's "unexplained 0.8mm" is
+  explained by this; the rest of risk 3 (two novel derivations in one
+  shape) stands.
 - **Q3 — Engraved/raised: per tray or per pocket?** And which is the
   default?
 - **Q4 — Font choice.** Droid Sans Mono Regular (bundled, already parsed

@@ -401,6 +401,11 @@ question below, not something I changed.
    shared** answers it definitively.
 5. **Is `1.3.3` cleared to release?** It is pushed but undeployed, and the
    snapshot 403 persists until it ships.
+   **RESOLVED 2026-09-26** — `1.3.3` is deployed to Unraid (see
+   SESSION-STATE.md). Section 7's "not yet deployed" and "still returning
+   403 today" describe 2026-09-09. That a snapshot now actually appears on
+   the deployed container is not recorded; and, as section 7 says, the
+   snapshots still vanish on recreate.
 6. **Was the Aug 28 mtime the container recreate?** SESSION-STATE dates
    the second recreate to 2026-09-07 and the projects are dated Sep 7.
    An Aug 28 mtime on an empty directory suggests it was last touched

@@ -17,10 +17,14 @@ Where things stand right now.
   additive only; `multiconnectContainerGeometry.ts` was not edited.
   Boundary-rep only, no CSG, no baked mesh (a round pocket's rim is a plain
   parametrized circle).
-- Tests: `tests/unit/socketTrayGeometry.test.ts` — 17 tests (manifold check,
+- Tests: `tests/unit/socketTrayGeometry.test.ts` — 36 tests (manifold check,
   exact directed-edge check, bounding box, validation guards, per-pocket
   raycasts asserting open top-to-floor and solid floor-to-bottom, a
-  between-pockets solid check, and a dedicated tightest-gap check).
+  between-pockets solid check, and a dedicated tightest-gap check). This
+  line read 17 until 2026-09-26: 17 was the count at the sampler build, and
+  the Corner Radius pass (`4be03de`) added a 19-test describe block without
+  this line being updated. Re-counted test by test from the runner's own
+  per-file report on 2026-09-26.
 - Generator: `scripts/generate-socket-tray-sampler.mjs`
   (`node --experimental-strip-types scripts/generate-socket-tray-sampler.mjs`).
 - Coupon: `test-prints/socket-tray-sampler.stl` — 240 × 60 × 18mm
@@ -100,8 +104,12 @@ and remains the test piece.
   x = 30 / 120 / 210 on the z = 30 centreline (30mm end margins, 90mm pitch).
   240mm leaves 16mm spare under the X1C's 256mm bed.
 - Generator: `scripts/generate-mounted-socket-tray-coupon.mjs`.
-- Tests: `tests/unit/mountedSocketTrayGeometry.test.ts` — 40 tests, and
-  `tests/unit/mountedSocketTrayShapeRegistration.test.ts` — 12 tests.
+- Tests: `tests/unit/mountedSocketTrayGeometry.test.ts` — 57 tests, and
+  `tests/unit/mountedSocketTrayShapeRegistration.test.ts` — 13 tests. These
+  read 40 and 12 until 2026-09-26 — the counts at the build (`c98cff5`,
+  40 + 12 = the 52 recorded there); the Corner Radius pass (`4be03de`) and
+  the pocket-X mirror fix (`3f5aba8`) added tests without this line being
+  updated. Re-counted test by test on 2026-09-26.
   Coverage includes the exact directed-edge check over the whole mesh, a
   dedicated inner-corner test isolating the plate-to-tray junction line,
   per-pocket raycasts, and a check that the slot channel is unobstructed
@@ -317,6 +325,30 @@ terms, never a comparison against these frozen zero-radius files.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Read-only recon for a fifth tray shape, the Gridfinity labeled socket tray
+  (`ea3c88f`, `reference/reports/gridfinity-labeled-tray-recon.md`). Nothing
+  built; owner decisions outstanding — see OPEN-ITEMS.md.
+- Read-only recon of where projects are actually written (`b0db792`,
+  `reference/reports/projects-storage-recon.md`): local projects live only in
+  the browser; the mapped `/data/projects` volume is written only by Export →
+  SKF → Save to shared.
+- **Released as `1.3.3`, built, pushed and deployed to Unraid (supersedes
+  `1.3.1`).** `9e926bf` makes the project-thumbnail origin guard derive host
+  and port from the `Host` header instead of `request.url`, and bumps the
+  version. Verified live on a standalone production build run the way the
+  container runs it (`HOSTNAME=0.0.0.0`): POST / GET / DELETE with
+  `Host: 192.168.1.250:3001` all returned 200 and the PNG came back
+  byte-identical. That verification was on the dev box; a thumbnail
+  actually appearing on the deployed Unraid container is not recorded here.
+  See DECISIONS.md for the guard and its tradeoff.
+- **`1.3.2` was built and pushed (`6ae02f7`) but never deployed**, because
+  it was a no-op on Unraid: it widened the guard to private-LAN IPv4 but
+  still tested `new URL(request.url)`, whose hostname in the container is
+  always the bind address `0.0.0.0`, and whose port (3000) could never match
+  the published port (3001). Its own commit message recorded that limit.
+- Read-only recon of the project snapshot thumbnails (`b4541de`,
+  `reference/reports/snapshot-recon.md`), which found the 403 that `1.3.3`
+  fixes.
 - Mounted Screwdriver Tray added: new geometry module, 72 tests across two new
   files, and editor registration across the same eight files. One L-prism
   solid, slotted plate plus a bored forward shelf; through-bores instead of
@@ -332,7 +364,8 @@ terms, never a comparison against these frozen zero-radius files.
   Depth removed entirely from the shape; new 10mm minimum thickness guard;
   bottom rim sharp. Both Socket Trays untouched and asserted so by a
   registration test; no coupon STL or generator script.
-- **Released as `1.3.1` and live on Unraid.** The release ships the two new
+- **Released as `1.3.1` and deployed to Unraid at the time (superseded by
+  `1.3.3` above).** The release ships the two new
   Screwdriver Tray shapes — the flat tray (`7b86e6d`) and the mounted tray
   (`80df302`) — plus the version bump (`2c35f4c`); GitHub Actions built and
   published the image on the push, and the owner pulled it and verified it
@@ -407,9 +440,10 @@ terms, never a comparison against these frozen zero-radius files.
 ## Production deployment
 
 - marlin-cad runs as a Docker container on Unraid (`192.168.1.250`), pulled
-  from `ghcr.io/marlin1111ai/marlin-cad:1.3.1` — pulled by the owner and
-  verified working in the browser. Docker runs on Unraid only — not on the
-  Linux dev box, and the owner does not want it there.
+  from `ghcr.io/marlin1111ai/marlin-cad:1.3.3` (deployed; supersedes
+  `1.3.1`, which was pulled by the owner and verified working in the
+  browser). `1.3.2` was never deployed. Docker runs on Unraid only — not on
+  the Linux dev box, and the owner does not want it there.
 - Host port 3001 → container port 3000.
 - Host path `/mnt/user/appdata/marlin-cad/projects` → `/data/projects`.
   `SKETCHFORGE_SHARED_PROJECTS_DIR=/data/projects` is baked into the image, so
@@ -419,14 +453,22 @@ terms, never a comparison against these frozen zero-radius files.
   Actions was enabled on this fork. `1.1.0` was the first image GitHub
   Actions built and published; see the Release process subsection below.
   Those two version numbers are history, not the deployed tag — the
-  container runs `1.3.1`.
+  container runs `1.3.3`.
 - The `marlin-cad` container has now gone missing from the Unraid Docker tab
   **twice**, and was recreated by hand from the settings above on both
   occasions: the first time at the `1.1.0` tag, and again on 2026-09-07
   during the `1.3.1` update. The cause is unrecorded on both occasions. The
   projects volume mapping meant no project data was lost either time. Port
   mapping, volume mapping and every other setting are as recorded above; only
-  the image tag has moved forward, to `1.3.1`. See KNOWN-FIXES.md.
+  the image tag has moved forward, to `1.3.1` then, and to `1.3.3` since.
+  See KNOWN-FIXES.md.
+- **Project thumbnails are NOT on the mapped volume.** The container writes
+  them to `/app/apps/web/.codex/project-thumbnails` (`process.cwd()` of the
+  standalone server plus `.codex/project-thumbnails`, no env var), which is
+  the container's disposable layer — every recreate discards them, and the
+  container has been recreated twice. Local projects themselves are not on
+  Unraid at all: they live in the browser's IndexedDB/localStorage. See
+  OPEN-ITEMS.md and `reference/reports/projects-storage-recon.md`.
 - Blinking Docker Manager icon fix re-applied on Unraid:
   `cp /mnt/user/appdata/marlin-cad/freecad.png /usr/local/emhttp/plugins/dynamix.docker.manager/images/question.png`
   — RAM-only, lost on reboot.
@@ -463,8 +505,10 @@ succeeded and published `1.1.0`. Full detail:
 
 Since then the process has run unattended: `1.2.0`
 (`reference/reports/release-1.2.0.md`) confirmed Actions publishes
-automatically on a push to `main` with no manual dispatch, and `1.3.0` and
-`1.3.1` each followed the same three steps; `1.3.1` is the tag now deployed.
+automatically on a push to `main` with no manual dispatch, and `1.3.0`,
+`1.3.1` and `1.3.3` each followed the same three steps. `1.3.2` ran steps 1
+and 2 only — step 3 was deliberately skipped because it would not have
+changed anything on Unraid. `1.3.3` is the tag now deployed.
 
 ## Print status
 
@@ -483,18 +527,24 @@ automatically on a push to `main` with no manual dispatch, and `1.3.0` and
 
 ## Test suite
 
-547 unit tests passing across 53 files (`npm test`, 2026-09-07), of which
-36 are in `tests/unit/socketTrayGeometry.test.ts`, 8 in
+575 unit tests passing across 54 files (`npm test`, re-run 2026-09-26 on
+`ea3c88f`, not carried forward), of which 36 are in
+`tests/unit/socketTrayGeometry.test.ts`, 8 in
 `tests/unit/socketTrayShapeRegistration.test.ts`, 57 in
 `tests/unit/mountedSocketTrayGeometry.test.ts`, 13 in
 `tests/unit/mountedSocketTrayShapeRegistration.test.ts`, 50 in
 `tests/unit/screwdriverTrayGeometry.test.ts`, 9 in
 `tests/unit/screwdriverTrayShapeRegistration.test.ts`, 59 in
-`tests/unit/mountedScrewdriverTrayGeometry.test.ts` and 13 in
-`tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts`. The four
-socket-tray files still total 114 and the two flat-screwdriver files 59; none
-of the six were modified by the mounted screwdriver pass. `npm run typecheck`
-is clean.
+`tests/unit/mountedScrewdriverTrayGeometry.test.ts`, 13 in
+`tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts` and 28 in
+`tests/unit/projectThumbnailOrigin.test.ts` (new since 2026-09-07: the
+thumbnail guard's tests, added across `6ae02f7` and `9e926bf`; it is the
+54th file and accounts for the whole 547 → 575 difference). Every per-file
+figure here was counted from the runner's own per-file report, test by
+test, not inherited; the per-shape figures in the sections above now agree
+with them. The four socket-tray files total 114, the two flat-screwdriver
+files 59 and the two mounted-screwdriver files 72. `npm run typecheck` is
+clean.
 
 ## Printers
 
