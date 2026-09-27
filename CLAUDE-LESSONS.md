@@ -113,3 +113,25 @@ at exactly one clearly-marked spot (`normalizedPegs`:
 `x_geometry = plateWidth - x_viewed`). Do not "simplify" the mirror away —
 the printed sampler is the proof it belongs there. Slots need no mirror
 (the centering formula is mirror-symmetric), and vertical z is unaffected.
+
+## 2026-09-27 — Earcut leaves open edges when a triangle edge passes over contour points lying on it
+
+Building the label test piece (`labelSlabGeometry.ts`), earcut left open
+edges on "12mm": 4 of them, in both the raised and the recessed style. The
+glyphs of a label share one baseline, which let a triangle edge of the
+top-face cap pass over glyph corners lying on it. The glyph walls stop at
+those corners, so the long edge had no partner. Found by running the exact
+directed-edge test on every label separately; the repo's
+`analyzeTriangleSoup` reports the same 4 boundary edges. The other eleven
+socket labels ("5mm" .. "16mm") came out closed without any fix. Fixed by
+splitting any triangle at a contour point lying on its edge
+(`conformTriangles`); no coordinate is computed, every vertex is still one
+of the contour's own points.
+
+## 2026-09-27 — A floating-point guard rejected a value sitting exactly on its limit; compare a sum instead
+
+`2.8 - 0.8` evaluates to `1.9999999999999998`, so a guard written as
+`thickness - LABEL_DEPTH < 2` rejected a slab leaving exactly the 2mm
+floor. Fixed by comparing a sum instead: `thickness < 2 + 0.8`, where
+`2 + 0.8` is exactly `2.8`. Found by a unit test placed on the limit
+itself (`labelSlabGeometry.ts`, the recessed-label floor guard).

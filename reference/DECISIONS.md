@@ -60,3 +60,6 @@ Design decisions and the reason for each.
   - "5mm" means the printed digit measures 5mm tall, not font size 5
   - both raised and recessed on one piece
   - plain slab, 3mm thick, no pockets, sized just big enough for the labels
+- **Label test piece digit height: the 0–9 digit set spans exactly 5.00mm on a shared baseline.** Owner's decision, 2026-09-27. Individual Helvetiker bold digits therefore measure 4.69mm (4 and 7) to 4.99mm (3). The owner kept it this way rather than rebuilding so every digit is at least 5mm.
+- **The label test piece prints as-is, font spacing unchanged.** Owner's decision, 2026-09-27. This includes the 0.24mm gap between "0" and "m" in "10mm", which the builder expects to fuse when raised and vanish when recessed. The owner chose to let the print show what fuses. Builder's correction, 2026-09-27: the brief for this entry placed that gap in "10mm" through "16mm"; measured from the outlines, the "0"–"m" pair occurs only in "10mm". The digit-to-"m" gap in the other labels measures 0.26mm to 0.44mm, except 0.98mm in "11mm".
+- **The label test piece's 3mm edge margin and 3mm gap between labels are the builder's numbers.** Recorded 2026-09-27. The foreman accepted them as within the owner's "just big enough".
