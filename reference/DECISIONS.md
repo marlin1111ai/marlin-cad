@@ -65,3 +65,16 @@ Design decisions and the reason for each.
 - **The label test piece's 3mm edge margin and 3mm gap between labels are the builder's numbers.** Recorded 2026-09-27. The foreman accepted them as within the owner's "just big enough".
 - **The label test piece printed and passed.** Owner's report, 2026-09-27. The owner printed `test-prints/label-test-piece.stl` and reported "they all good": every label legible, raised and recessed.
 - **The Gridfinity labeled socket tray gets a raised/recessed label setting; the default is raised.** Owner's decision, 2026-09-27. The tray gets a setting so the owner chooses raised or recessed labels each time he makes one ("give me the chose for booth when im making it"). The default is raised; that default is the foreman's call.
+- **Gridfinity labeled socket tray: the owner's answers.** Recorded 2026-09-27.
+  - The tray is its own pass. A Gridfinity foot test piece is printed and checked in the owner's baseplate before the tray is built.
+  - Foot dimensions, including the plan corner radius, are measured from the owner's reference Gridfinity STLs.
+  - Tray size is typed in Gridfinity squares (for example 4 × 2).
+  - Hole top edge uses the same user-typed Corner Radius the other trays use, not a 0.8mm chamfer.
+  - No stacking lip.
+  - Clearances follow the reference: 4mm hole-to-edge, 3mm between holes.
+  - Each label is placed automatically just below its hole, kept clear of holes and edges.
+  - Hole depth is 14mm.
+  - Label text is typed per hole, using only the characters `0123456789m`.
+  - The tray is registered in the editor, with the raised/recessed choice.
+  - The raised/recessed setting applies to the whole tray. This is the foreman's reading of "when im making it"; the owner did not correct it.
+  - The foot test piece is 2 × 1 Gridfinity squares. This is the foreman's call.
