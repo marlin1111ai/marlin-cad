@@ -556,6 +556,11 @@ clean, or with the dev server having run from `apps/web`.
    undo-history sense. The route, the effect, and the 403 gate are all
    untested.
 
+   > **CORRECTED 2026-09-27.** The gate now has tests:
+   > `tests/unit/projectThumbnailOrigin.test.ts`, 28 tests, added across
+   > `6ae02f7` and `9e926bf`. It is the only test file that mentions
+   > thumbnails; the route's write path and the capture effect have no test.
+
 ---
 
 ## SCOPE CHECK

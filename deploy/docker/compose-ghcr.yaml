@@ -1,6 +1,6 @@
 services:
   sketchforge:
-    image: ghcr.io/formsmith746/sketchforge-3d:latest
+    image: ghcr.io/marlin1111ai/marlin-cad:latest
     ports:
       - "${SKETCHFORGE_PORT:-3000}:3000"
     environment:

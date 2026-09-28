@@ -26,3 +26,7 @@ and checked".
 ## Print status
 
 The tray is still unprinted.
+
+**CORRECTED 2026-09-27:** later the same day the owner printed the
+Gridfinity Socket Tray, the default insert, and reported "it prints and
+works" (`reference/DECISIONS.md`).

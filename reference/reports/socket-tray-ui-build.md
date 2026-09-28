@@ -180,6 +180,10 @@ listed under open questions.
 - The exported coupon's pockets land at file-x = 30 … 210 in order, the
   same as the printed coupon (step 9 below).
 
+  **CORRECTED 2026-09-27:** the coupon had not been printed, and has not
+  been since (`reference/SESSION-STATE.md`). Step 9 compares the export
+  with the committed file `test-prints/socket-tray-sampler.stl`.
+
 Side observation, no change: the module names Z = 0 "front" and Z = depth
 "back" (`socketTrayGeometry.ts:252-253`); from the home camera, +Z is toward
 the viewer, so the module's "back" face is the nearer one. The default

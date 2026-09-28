@@ -322,6 +322,12 @@ with diameter in a way that would predict a small-diameter failure mode —
 radius, so a 10mm pocket is triangulated exactly as finely as a 27mm one,
 just physically smaller — and the observed results bore that out.
 
+**CORRECTED 2026-09-27:** this section describes the earlier 10/14/18/22/27mm
+coupon. The 10mm pocket is no longer in the set: the Update 3 file table
+above records the test renamed "10mm→14mm since 10mm is no longer in the
+set", and the test in `tests/unit/socketTrayGeometry.test.ts` now reads
+"off-center inside the smallest pocket (14mm), still open top-to-floor".
+
 ## Open questions
 
 - **Pocket depth (14mm) is now the ONLY remaining estimate in the coupon.**

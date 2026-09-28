@@ -152,7 +152,7 @@ docker run -d --name sketchforge --restart unless-stopped \
   -p 3000:3000 \
   -e SKETCHFORGE_SHARED_PROJECTS_DIR=/data/projects \
   -v sketchforge-shared-projects:/data/projects \
-  ghcr.io/formsmith746/sketchforge-3d:latest
+  ghcr.io/marlin1111ai/marlin-cad:latest
 ```
 
 After running, open this on the same computer:

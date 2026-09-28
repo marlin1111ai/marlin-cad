@@ -11,7 +11,7 @@ Where things stand right now.
 - `plateThickness` minimum is 6.5mm.
 - Default OpenGrid spacing is 28mm.
 
-## Socket Tray — active feature, sampler stage (physical gate pending)
+## Socket Tray — built and registered, coupon unprinted (physical gate pending)
 
 - Module: `apps/web/src/lib/socketTrayGeometry.ts` — new sibling primitive,
   additive only; `multiconnectContainerGeometry.ts` was not edited.
@@ -309,6 +309,91 @@ three earlier trays are unchanged by this work.
   untouched.
 - Status: **unvalidated and unprinted**, with no candidate file to print.
 
+## Label test piece — printed and passed
+
+Text labels as printable geometry, built and printed before any tray was
+built on labels.
+
+- Module: `apps/web/src/lib/labelSlabGeometry.ts` (`742dcb1`) — a plain flat
+  slab whose top face carries labels, each raised 0.8mm or recessed 0.8mm.
+  Boundary-rep only, no CSG. Not registered in the editor.
+- Font: Helvetiker bold, from three's bundled typeface fonts. One uniform
+  scale makes the digit set 0–9 exactly 5.00mm tall; individual digits
+  measure 4.69mm to 4.99mm. Only the characters `0123456789m` are accepted.
+- Tests: `tests/unit/labelSlabGeometry.test.ts` — 49 tests, including the
+  exact directed-edge test on every label in both styles and a byte-for-byte
+  match between the committed STL and the module. The raycast test was sped
+  up in `6f8813f` after it timed out in CI on `742dcb1` and `e40575f`.
+- Generator: `scripts/generate-label-test-piece.mjs`.
+- File: `test-prints/label-test-piece.stl` — 87.44 × 51 × 3mm (3.8mm over
+  the raised labels), 24 labels ("5mm" to "16mm", each raised and recessed),
+  40,864 triangles.
+- Status: **printed 2026-09-27 and passed** — the owner reported "they all
+  good" (DECISIONS.md).
+
+## Gridfinity foot test piece — printed and passed
+
+The Gridfinity foot as printable geometry, built and printed before the
+Gridfinity Socket Tray was built on it.
+
+- Module: `apps/web/src/lib/gridfinityFootGeometry.ts` (`b1cbb5f`) — an
+  N × M grid of feet on a 42mm pitch under a plain flat plate. Boundary-rep,
+  one solid, no CSG and no earcut. Not registered in the editor on its own.
+- Every foot dimension was measured from the owner's reference Gridfinity
+  STL: 35.6mm square at the bed, 37.2mm at 0.8mm and 2.6mm, 41.5mm at
+  4.75mm, with plan corner radii 0.8 / 1.6 / 1.6 / 3.75mm.
+- Tests: `tests/unit/gridfinityFootGeometry.test.ts` — 39 tests, including a
+  byte-for-byte match between the committed STL and the module.
+- Generator: `scripts/generate-gridfinity-foot-test-piece.mjs`.
+- File: `test-prints/gridfinity-foot-test-piece.stl` — 2 × 1 squares, two
+  feet joined by a 3mm plate, 83.5 × 41.5 × 7.75mm, 1,250 triangles.
+- Status: **printed 2026-09-27 and passed** — the owner checked it in his
+  Gridfinity baseplate and reported "looks good" (DECISIONS.md).
+
+## Gridfinity Socket Tray — built, registered, deployed and printed
+
+The fifth tray shape: a Gridfinity-footed tray sized in whole squares, with
+round blind holes and a text label in front of each hole. The other four
+trays are unchanged by this work.
+
+- Module: `apps/web/src/lib/gridfinitySocketTrayGeometry.ts` (`586033e`) —
+  new, additive. It imports from `gridfinityFootGeometry.ts`,
+  `labelSlabGeometry.ts` and `socketTrayGeometry.ts` and edits none of them.
+  Boundary-rep, one solid, no CSG.
+- Size: 42N − 0.5 by 42M − 0.5mm, at most 6 squares per axis (the 256mm
+  bed). The top face is 22.75mm above the bed: 4.75mm feet, a 4mm floor and
+  14mm holes. Body height and hole depth are fixed. Raised labels add 0.8mm.
+- Holes: owner-typed diameter, X from the left edge and Z from the edge
+  nearest the viewer, which is geometry Z = depth; Z is turned into geometry
+  space at one marked spot (`normalizedHoles`). No auto-layout.
+- Labels: text typed per hole (`0123456789m` only, blank for none),
+  Helvetiker bold, centred on the hole, 3mm in front of its rim. One
+  raised / recessed setting for the whole tray, default raised.
+- Corner Radius: owner-typed, on every hole's top edge and the top
+  perimeter; it must stay below 3.75mm.
+- Guards, thrown and shown inline, nothing moved: 4mm to the tray edge and
+  3mm between holes, for holes and labels alike.
+- Tests: `tests/unit/gridfinitySocketTrayGeometry.test.ts` — 64 tests, and
+  `tests/unit/gridfinitySocketTrayShapeRegistration.test.ts` — 12 tests. The
+  registration test pins the four earlier trays' catalog entries and default
+  inserts to the values captured on `b1cbb5f`.
+- Registered in the editor as "Gridfinity Socket Tray" in its own Gridfinity
+  section (colour `#0d9488`), with inspector rows for Squares Wide, Squares
+  Deep, Corner Radius and Labels, a per-hole Diameter / X / Z / Label list,
+  and Add Hole.
+- Default insert: 3 × 2 squares, 125.5 × 83.5 × 23.55mm overall, Corner
+  Radius 0, raised labels, three holes of 15 / 19 / 19mm at X = 20.75 /
+  62.75 / 104.75 and Z = 41.75, labelled "8mm" / "10mm" / "12mm".
+- Exported from the running dev app on 2026-09-27, the default insert was
+  9,776 facets with 0 boundary and 0 non-manifold edges.
+- **No coupon STL and no generator script** — not in scope; `test-prints/`
+  was untouched, and the file the owner printed is not in the repo.
+- Status: **deployed to Unraid and printed 2026-09-27** — the owner checked
+  it in the dev app ("looks good"), deployed it and checked it in production
+  ("all good updated and checked"), then printed the default insert and
+  reported "it prints and works" (DECISIONS.md,
+  `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`).
+
 ## Physical gate — both coupons are unprinted
 
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor
@@ -323,11 +408,24 @@ rounding changes the mesh, so any future production or demo print at a
 chosen Corner Radius is a NEW coupon printed and hand-verified on its own
 terms, never a comparison against these frozen zero-radius files.
 
+**2026-09-27:** the Gridfinity Socket Tray, a separate fifth shape, was
+built, deployed and printed by the owner while both coupons were still
+unprinted. Both coupons remain unprinted.
+
 ## Recent shipped work (all pushed to origin/main)
 
-- Read-only recon for a fifth tray shape, the Gridfinity labeled socket tray
-  (`ea3c88f`, `reference/reports/gridfinity-labeled-tray-recon.md`). Nothing
-  built; owner decisions outstanding — see OPEN-ITEMS.md.
+- Gridfinity Socket Tray, the fifth tray shape: built and registered
+  (`586033e`), deployed to Unraid (`9afa443`,
+  `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`) and
+  printed by the owner (`0803ac0`), all on 2026-09-27.
+- Gridfinity foot test piece: module, 39 tests, generator and STL
+  (`b1cbb5f`); printed and passed 2026-09-27.
+- Label test piece: module, 49 tests, generator and STL (`742dcb1`), with
+  the CI timeout fixed in `6f8813f`; printed and passed 2026-09-27
+  (`6765ec8`).
+- Read-only recon for the Gridfinity labeled socket tray (`ea3c88f`,
+  `reference/reports/gridfinity-labeled-tray-recon.md`), which preceded the
+  three entries above.
 - Read-only recon of where projects are actually written (`b0db792`,
   `reference/reports/projects-storage-recon.md`): local projects live only in
   the browser; the mapped `/data/projects` volume is written only by Export →
@@ -449,6 +547,16 @@ terms, never a comparison against these frozen zero-radius files.
   `1.3.1`, which was pulled by the owner and verified working in the
   browser). `1.3.2` was never deployed. Docker runs on Unraid only — not on
   the Linux dev box, and the owner does not want it there.
+- **Since 2026-09-27 the container runs the image built from `586033e`**
+  (`sha256:d1c2c036e0eb6e29dd7d53dbe258b5bf24fa7f721f65c9bb9d6c9d5af146ae4d`,
+  also tagged `sha-586033e`), which adds the Gridfinity Socket Tray. The
+  owner force-updated the `1.3.3` container to it and checked the tray in
+  production. The rollback tag is
+  `ghcr.io/marlin1111ai/marlin-cad:sha-9e926bf`. The `1.3.3` tag has been
+  re-pointed by later pushes and no longer resolves to the deployed image.
+  See `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`.
+- Unraid backups are run by the owner by hand in Unraid's web terminal; the
+  dev box has no route to Unraid (DECISIONS.md).
 - Host port 3001 → container port 3000.
 - Host path `/mnt/user/appdata/marlin-cad/projects` → `/data/projects`.
   `SKETCHFORGE_SHARED_PROJECTS_DIR=/data/projects` is baked into the image, so
@@ -514,7 +622,8 @@ Since then the process has run unattended: `1.2.0`
 automatically on a push to `main` with no manual dispatch, and `1.3.0`,
 `1.3.1` and `1.3.3` each followed the same three steps. `1.3.2` ran steps 1
 and 2 only — step 3 was deliberately skipped because it would not have
-changed anything on Unraid. `1.3.3` is the tag now deployed.
+changed anything on Unraid. `1.3.3` is the tag now deployed; since
+2026-09-27 the container runs the `586033e` build under it (see above).
 
 ## Print status
 
@@ -524,6 +633,14 @@ changed anything on Unraid. `1.3.3` is the tag now deployed.
   yet printed; it is the physical gate for the socket work.
 - Mounted Socket Tray coupon (`test-prints/mounted-socket-tray-coupon.stl`):
   not yet printed; the second half of that gate.
+- Label test piece (`test-prints/label-test-piece.stl`): printed 2026-09-27
+  and passed.
+- Gridfinity foot test piece (`test-prints/gridfinity-foot-test-piece.stl`):
+  printed 2026-09-27 and passed in the owner's baseplate.
+- Gridfinity Socket Tray, the default insert: printed 2026-09-27; "it prints
+  and works".
+- Screwdriver Tray and Mounted Screwdriver Tray: not printed; no candidate
+  file.
 
 ## Other validated primitives
 
@@ -533,8 +650,8 @@ changed anything on Unraid. `1.3.3` is the tag now deployed.
 
 ## Test suite
 
-575 unit tests passing across 54 files (`npm test`, re-run 2026-09-26 on
-`ea3c88f`, not carried forward), of which 36 are in
+739 unit tests passing across 58 files (`npm test`, re-run 2026-09-27 on
+`0803ac0`, not carried forward), of which 36 are in
 `tests/unit/socketTrayGeometry.test.ts`, 8 in
 `tests/unit/socketTrayShapeRegistration.test.ts`, 57 in
 `tests/unit/mountedSocketTrayGeometry.test.ts`, 13 in
@@ -542,15 +659,19 @@ changed anything on Unraid. `1.3.3` is the tag now deployed.
 `tests/unit/screwdriverTrayGeometry.test.ts`, 9 in
 `tests/unit/screwdriverTrayShapeRegistration.test.ts`, 59 in
 `tests/unit/mountedScrewdriverTrayGeometry.test.ts`, 13 in
-`tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts` and 28 in
-`tests/unit/projectThumbnailOrigin.test.ts` (new since 2026-09-07: the
-thumbnail guard's tests, added across `6ae02f7` and `9e926bf`; it is the
-54th file and accounts for the whole 547 → 575 difference). Every per-file
+`tests/unit/mountedScrewdriverTrayShapeRegistration.test.ts`, 28 in
+`tests/unit/projectThumbnailOrigin.test.ts`, 49 in
+`tests/unit/labelSlabGeometry.test.ts`, 39 in
+`tests/unit/gridfinityFootGeometry.test.ts`, 64 in
+`tests/unit/gridfinitySocketTrayGeometry.test.ts` and 12 in
+`tests/unit/gridfinitySocketTrayShapeRegistration.test.ts` (the last four
+files are new since 2026-09-26; their 164 tests account for the whole
+575 → 739 difference). Every per-file
 figure here was counted from the runner's own per-file report, test by
 test, not inherited; the per-shape figures in the sections above now agree
 with them. The four socket-tray files total 114, the two flat-screwdriver
-files 59 and the two mounted-screwdriver files 72. `npm run typecheck` is
-clean.
+files 59, the two mounted-screwdriver files 72 and the two Gridfinity
+Socket Tray files 76. `npm run typecheck` is clean.
 
 ## Printers
 
