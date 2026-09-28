@@ -626,7 +626,9 @@ unprinted. Both coupons remain unprinted.
 - **`1.3.4` is published but not deployed.** It was built from `c9a4c6d`
   (`sha256:e3906a1e266949facd9fd88a6db9da48d4f585907722cee2feb2b3a95ad4f9fd`,
   also tagged `sha-c9a4c6d`). The `1.3.4` tag is re-pointed by every push to
-  `main` since; `sha-c9a4c6d` is not.
+  `main` since; `sha-c9a4c6d` is not. The container's tag is to change from
+  `1.3.3` to `1.3.4` once, at the next update, and be force-updated from
+  then on (Release process, below; DECISIONS.md, 2026-09-28).
 - Unraid backups are run by the owner by hand in Unraid's web terminal; the
   dev box has no route to Unraid (DECISIONS.md).
 - Host port 3001 → container port 3000.
@@ -665,13 +667,27 @@ unprinted. Both coupons remain unprinted.
 
 ### Release process
 
-1. Claude Code bumps the version in the root `package.json` and pushes to
-   `main`.
-2. GitHub Actions (`.github/workflows/docker.yml`) builds the image and
-   publishes it to `ghcr.io/marlin1111ai/marlin-cad:<version>` (alongside
-   `main`, `sha-<short>`, and `latest`).
-3. The owner changes the tag in the Unraid container's image field to the
-   new version and applies the update.
+Since 2026-09-28 (DECISIONS.md, "Unraid is updated by force update"):
+
+1. Claude Code pushes to `main`. The version is not bumped for a release.
+2. GitHub Actions (`.github/workflows/docker.yml`) builds and publishes the
+   image, and re-points the current version tag,
+   `ghcr.io/marlin1111ai/marlin-cad:1.3.4`, to it, alongside `sha-<short>`,
+   `main` and `latest`.
+3. The owner force-updates the container on Unraid.
+
+**The one-time switch from `1.3.3` to `1.3.4` is pending at the next
+update.** The container still names the `1.3.3` tag. That tag no longer
+moves, because the version in `package.json` is `1.3.4`, so a force update
+of it picks up nothing new. At the next update the owner changes the
+container's tag to `1.3.4` once; after that he force-updates it.
+
+Until 2026-09-28 the process was three different steps, and the history
+below is written against them: (1) Claude Code bumped the version in the
+root `package.json` and pushed to `main`; (2) GitHub Actions built the image
+and published it to `ghcr.io/marlin1111ai/marlin-cad:<version>`; (3) the
+owner changed the tag in the Unraid container's image field to the new
+version and applied the update.
 
 Actions had never run on this repo because it is a fork of
 `Formsmith746/SketchForge-3D` — GitHub disables workflows by default on a
@@ -692,13 +708,19 @@ succeeded and published `1.1.0`. Full detail:
 Since then the process has run unattended: `1.2.0`
 (`reference/reports/release-1.2.0.md`) confirmed Actions publishes
 automatically on a push to `main` with no manual dispatch, and `1.3.0`,
-`1.3.1` and `1.3.3` each followed the same three steps. `1.3.2` ran steps 1
-and 2 only — step 3 was deliberately skipped because it would not have
-changed anything on Unraid. `1.3.4` (`c9a4c6d`, 2026-09-28) also ran steps
-1 and 2 only: it is published and was not deployed, because the owner
-force-updated the `1.3.3` container instead. `1.3.3` is the tag now
-deployed; since 2026-09-28 the container runs the `0fc0b75` build under it
-(see above).
+`1.3.1` and `1.3.3` each followed the earlier three steps. `1.3.2` ran
+steps 1 and 2 only — step 3 was deliberately skipped because it would not
+have changed anything on Unraid. `1.3.4` (`c9a4c6d`, 2026-09-28) also ran
+the earlier steps 1 and 2 only: it is published and was not deployed,
+because the owner force-updated the `1.3.3` container instead. It is the
+last version bump made for a release. `1.3.3` is the tag now deployed;
+since 2026-09-28 the container runs the `0fc0b75` build under it (see
+above).
+
+The two deploys recorded so far, on 2026-09-27 and 2026-09-28, were both
+force updates of the `1.3.3` container. Each picked up the build that tag
+pointed at: `586033e`, then `0fc0b75`, the last push made at version
+`1.3.3`.
 
 ## Print status
 
