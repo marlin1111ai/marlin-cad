@@ -394,10 +394,11 @@ trays are unchanged by this work.
   reported "it prints and works" (DECISIONS.md,
   `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`).
 
-## Viewport mouse controls — changed, awaiting the owner's hands-on test
+## Viewport mouse controls — changed, and passed by the owner
 
 The 3D viewport's mouse movement was changed on 2026-09-28 to follow Bambu
-Studio's (DECISIONS.md, owner's answers 1a and 2a).
+Studio's (DECISIONS.md, owner's answers 1a and 2a). The change is
+`bf755c5`; `d5c8af0` corrects one line of its build report.
 
 - What changed, for the mouse:
   - Left-drag starting on empty space spins the view and leaves the
@@ -425,11 +426,15 @@ Studio's (DECISIONS.md, owner's answers 1a and 2a).
   sent through Chrome's own input pipeline, before and after the change;
   no physical mouse was used. 739 tests pass across 58 files and typecheck
   is clean.
-- Status: **awaiting the owner's hands-on test.** A dev server was left
-  running on the dev box on port 3000 for it, started with
+- Status: **passed by the owner, 2026-09-28**, after his hands-on test on
+  his Mac; his words: "bank it" (DECISIONS.md). This line read "awaiting
+  the owner's hands-on test" until then. For the test a dev server was left
+  running on the dev box on port 3000, started with
   `SKETCHFORGE_ALLOWED_DEV_ORIGINS=192.168.1.245 npm run dev`; without that
   setting the dev server refuses the app's scripts to a browser on another
-  machine. The owner opens `http://192.168.1.245:3000`.
+  machine. The owner opened `http://192.168.1.245:3000`.
+- Commits: `bf755c5` (the change, the notebook entries and the build
+  report) and `d5c8af0` (the build report's line on the F key, corrected).
 - Not deployed. Production on Unraid is unchanged.
 - Full detail: `reference/reports/viewport-mouse-controls-recon.md`,
   `reference/reports/viewport-mouse-controls-build.md`.

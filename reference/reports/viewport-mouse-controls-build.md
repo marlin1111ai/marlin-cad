@@ -734,3 +734,31 @@ same request answered 200. No file was edited for this.
 4. **Very large scenes.** A plain left press now makes two extra ray casts
    before the camera moves. On the three-box scene it is not noticeable; it
    was not measured on a heavy one.
+
+---
+
+## Answers — 2026-09-28
+
+Appended after the owner's hands-on test on his Mac. He passed the controls;
+his words: "bank it". Nothing above this line was changed. The numbers are
+the numbers of section 9 (open questions) and section 10 (least sure of).
+
+### Open questions
+
+1. Touch stays as it was, including the near-a-part grab and the plain-drag
+   box; touch is not in scope (recon answer 12).
+2. Ctrl/Cmd + left-drag inside Chamfer/Fillet, Ruler and Place workplane
+   still spins, as it did before.
+3. The four spin inputs stay. Only left-drag on empty space is new; the
+   others worked before.
+4. Alt + left-drag on empty space spins, following plain left-drag.
+5. On-screen hints and the pointer: not asked for; nothing to do.
+6. Ruler add mode's right-drag works as it did before; see the correction
+   appended to the recon report.
+
+### Least sure of
+
+- 1, 3 and 4. The owner was asked to check the controls on his Mac with a
+  real part on screen, including a drag started next to a handle and a
+  trackpad if he uses one. He replied "bank it".
+- 2. Two-finger touch is not in scope.

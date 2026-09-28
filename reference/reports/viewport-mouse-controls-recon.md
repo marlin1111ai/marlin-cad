@@ -582,3 +582,18 @@ numbers.
   after it.
 
 The build is in `reference/reports/viewport-mouse-controls-build.md`.
+
+---
+
+## Correction — 2026-09-28
+
+Appended. Nothing above this line was changed.
+
+In Ruler add mode, right-drag does not move the camera, because the pending
+measurement point sits under the pointer. The recon's tool-mode table
+(section b, "When a mode or tool is active") said the camera is unchanged in
+every mode. Found by the build pass (`bf755c5`), which checked it live; it
+was so before the change and is so after it.
+
+This restates, as a correction of its own, the builder's note already in the
+Answers section above.
