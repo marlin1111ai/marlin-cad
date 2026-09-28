@@ -394,6 +394,46 @@ trays are unchanged by this work.
   reported "it prints and works" (DECISIONS.md,
   `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`).
 
+## Viewport mouse controls — changed, awaiting the owner's hands-on test
+
+The 3D viewport's mouse movement was changed on 2026-09-28 to follow Bambu
+Studio's (DECISIONS.md, owner's answers 1a and 2a).
+
+- What changed, for the mouse:
+  - Left-drag starting on empty space spins the view and leaves the
+    selection unchanged. It used to draw a selection box.
+  - Right-drag slides the view. It used to spin it.
+  - The selection box is Shift + left-drag starting on empty space, and
+    adds to the selection as before. Plain left-drag no longer draws one.
+  - Only a direct hit on a part selects or grabs it. A press near a part's
+    centre used to count as the part.
+  - Align and Mirror: left-drag on empty space spins. Align's click on a
+    selected part still sets the anchor.
+- What did not change: middle-drag slide; wheel zoom toward the pointer;
+  F / Home, O, +, - and the arrow keys; left-drag on a part; Shift + click
+  on a part; the handles and their Shift / Alt behaviour; Ctrl / Cmd +
+  left-drag, which spins; a left-click on empty space clearing the
+  selection; Chamfer / Fillet, Ruler and Place-workplane; the 2D sketch
+  view; touch input; the suppressed right-click menu.
+- One side effect of the right button moving: Shift / Ctrl / Cmd +
+  right-drag now spins, where it used to slide. OrbitControls swaps a
+  button's action while one of those keys is held.
+- Files: `apps/web/src/components/WorkplaneViewport.tsx` is the only code
+  file changed. No test, geometry module, stylesheet or file in
+  `test-prints/` was touched.
+- Checked live in headless Chrome 154 against the dev server, with input
+  sent through Chrome's own input pipeline, before and after the change;
+  no physical mouse was used. 739 tests pass across 58 files and typecheck
+  is clean.
+- Status: **awaiting the owner's hands-on test.** A dev server was left
+  running on the dev box on port 3000 for it, started with
+  `SKETCHFORGE_ALLOWED_DEV_ORIGINS=192.168.1.245 npm run dev`; without that
+  setting the dev server refuses the app's scripts to a browser on another
+  machine. The owner opens `http://192.168.1.245:3000`.
+- Not deployed. Production on Unraid is unchanged.
+- Full detail: `reference/reports/viewport-mouse-controls-recon.md`,
+  `reference/reports/viewport-mouse-controls-build.md`.
+
 ## Physical gate — both coupons are unprinted
 
 Neither `test-prints/socket-tray-sampler.stl` (flat, 6 pockets) nor

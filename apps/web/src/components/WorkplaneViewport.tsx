@@ -281,6 +281,7 @@ type ThreeState = {
   lastOverlaySync: number;
   lastViewCubeSync: number;
   rotationHandleSides: RotationHandleSides | null;
+  resolveLeftButtonCameraAction: ((event: PointerEvent) => THREE.MOUSE | null) | null;
   disposeInteractionListeners: () => void;
   resize: () => void;
 };
@@ -341,6 +342,13 @@ type MarqueeState = {
   currentX: number;
   currentY: number;
   additive: boolean;
+  hasMoved: boolean;
+};
+
+type EmptySpacePressState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
   hasMoved: boolean;
 };
 
@@ -2341,6 +2349,8 @@ export function WorkplaneViewport({
   const moveDimensionOverlayRef = useRef<MoveDimensionOverlayState | null>(null);
   const moveDimensionsEnabledRef = useRef(true);
   const marqueeRef = useRef<MarqueeState | null>(null);
+  const emptySpacePressRef = useRef<EmptySpacePressState | null>(null);
+  const leftButtonCameraActionRef = useRef<((event: PointerEvent) => THREE.MOUSE | null) | null>(null);
   const transformRef = useRef<TransformDragState | null>(null);
   const lastResizeAnchorRef = useRef<ResizeAnchorMemory | null>(null);
   const suppressNextLiftEditRef = useRef(false);
@@ -2810,6 +2820,7 @@ export function WorkplaneViewport({
     }
 
     const state = createThreeScene(host);
+    state.resolveLeftButtonCameraAction = (event) => leftButtonCameraActionRef.current?.(event) ?? null;
     threeRef.current = state;
     rebuildWorkplane(state, workspaceRef.current, resolvedThemeRef.current, placementWorkplaneRef.current);
     window.sketchforgeCaptureCanvas = () => {
@@ -3842,7 +3853,9 @@ export function WorkplaneViewport({
     setActiveRotationWheel(false);
   }, []);
 
-  const pickShape = useCallback((clientX: number, clientY: number) => {
+  // A mouse or pen only picks the part the ray hits. Touch input is unchanged and
+  // keeps the near-a-part fallback (allowNearFallback).
+  const pickShape = useCallback((clientX: number, clientY: number, allowNearFallback = false) => {
     const state = threeRef.current;
     if (!state) {
       return null;
@@ -3863,6 +3876,9 @@ export function WorkplaneViewport({
     });
     if (hit) {
       return hit.object.userData.shapeId as string;
+    }
+    if (!allowNearFallback) {
+      return null;
     }
 
     let nearestId: string | null = null;
@@ -3986,12 +4002,42 @@ export function WorkplaneViewport({
     };
   }, []);
 
+  // Runs on the canvas before OrbitControls reads its button map, and mirrors the
+  // order handlePointerDown tests things in: a plain left press spins the view only
+  // when no tool owns the left button and nothing is under the pointer.
+  const resolveLeftButtonCameraAction = useCallback(
+    (event: PointerEvent) => {
+      if (event.pointerType === "touch" || event.shiftKey) {
+        return null;
+      }
+      if (
+        modifierActiveRef.current
+        || rulerDeleteModeRef.current
+        || rulerMoveModeRef.current
+        || rulerModeRef.current
+        || workplaneModeRef.current
+      ) {
+        return null;
+      }
+      if (pickTransformHandle(event.clientX, event.clientY) || pickShape(event.clientX, event.clientY)) {
+        return null;
+      }
+      return THREE.MOUSE.ROTATE;
+    },
+    [pickShape, pickTransformHandle],
+  );
+
+  useEffect(() => {
+    leftButtonCameraActionRef.current = resolveLeftButtonCameraAction;
+  }, [resolveLeftButtonCameraAction]);
+
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const state = threeRef.current;
       if (!state) {
         return;
       }
+      emptySpacePressRef.current = null;
       if (event.button !== 0 || event.ctrlKey || event.metaKey) {
         return;
       }
@@ -4170,9 +4216,22 @@ export function WorkplaneViewport({
         return;
       }
 
-      const id = pickShape(event.clientX, event.clientY);
+      const isTouch = event.pointerType === "touch";
+      const id = pickShape(event.clientX, event.clientY, isTouch);
       const additive = event.shiftKey;
       if (!id) {
+        if (!additive && !isTouch) {
+          // The camera has this press (resolveLeftButtonCameraAction). Only a press
+          // released without a drag does anything here: it clears the selection.
+          event.preventDefault();
+          emptySpacePressRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasMoved: false,
+          };
+          return;
+        }
         const startX = event.clientX - rect.left;
         const startY = event.clientY - rect.top;
         event.preventDefault();
@@ -4367,6 +4426,15 @@ export function WorkplaneViewport({
         return;
       }
 
+      const emptySpacePress = emptySpacePressRef.current;
+      if (emptySpacePress) {
+        if (event.pointerId === emptySpacePress.pointerId) {
+          emptySpacePress.hasMoved = emptySpacePress.hasMoved
+            || Math.hypot(event.clientX - emptySpacePress.startX, event.clientY - emptySpacePress.startY) > 5;
+        }
+        return;
+      }
+
       const drag = dragRef.current;
       if (!drag) {
         return;
@@ -4494,6 +4562,15 @@ export function WorkplaneViewport({
           state.controls.enabled = true;
         }
         onInteractionActiveChange?.(false);
+        return;
+      }
+
+      const emptySpacePress = emptySpacePressRef.current;
+      if (emptySpacePress) {
+        emptySpacePressRef.current = null;
+        if (!emptySpacePress.hasMoved) {
+          onSelectShape(null);
+        }
         return;
       }
 
@@ -5068,7 +5145,7 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
   controls.mouseButtons = {
     LEFT: null,
     MIDDLE: THREE.MOUSE.PAN,
-    RIGHT: THREE.MOUSE.ROTATE,
+    RIGHT: THREE.MOUSE.PAN,
   };
   controls.minDistance = 18;
   controls.maxDistance = 4200;
@@ -5163,21 +5240,32 @@ function createThreeScene(host: HTMLDivElement): ThreeState {
     lastOverlaySync: 0,
     lastViewCubeSync: 0,
     rotationHandleSides: null,
+    resolveLeftButtonCameraAction: null,
     disposeInteractionListeners: () => {},
     resize,
   };
   const requestRender = () => {
     state.needsRender = true;
   };
+  const leftButtonCameraAction = (event: PointerEvent) => {
+    if (event.button !== 0) {
+      return null;
+    }
+    // OrbitControls swaps PAN to ROTATE while Ctrl or Cmd is held, so this spins.
+    if (event.ctrlKey || event.metaKey) {
+      return THREE.MOUSE.PAN;
+    }
+    return state.resolveLeftButtonCameraAction?.(event) ?? null;
+  };
   const configureSketchForgeMouseButtons = (event: PointerEvent) => {
-    controls.mouseButtons.LEFT = event.button === 0 && (event.ctrlKey || event.metaKey) ? THREE.MOUSE.PAN : null;
+    controls.mouseButtons.LEFT = leftButtonCameraAction(event);
     controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-    controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
   };
   const resetSketchForgeMouseButtons = () => {
     controls.mouseButtons.LEFT = null;
     controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-    controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
   };
   const preventContextMenu = (event: MouseEvent) => {
     event.preventDefault();

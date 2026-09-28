@@ -540,3 +540,45 @@ left-button decision, and row 1 needs the two layers re-ordered (row 1,
 5. **Hidden parts and the near-a-part fallback.** The fallback loop skips
    image plates but has no test for hidden parts (`Viewport:3870-3871`).
    Whether hidden parts ever reach it was not traced.
+
+---
+
+## Answers — 2026-09-28
+
+Appended after the owner and foreman answered the open questions above.
+Nothing above this line was changed. The numbers are the open questions'
+numbers.
+
+1. Plain left-drag over a part grabs it, as in Bambu; Ctrl/Cmd + left-drag
+   and Shift + right-drag still move the camera from anywhere.
+2. Ctrl/Cmd + left-drag is kept (owner chose the movement only, 1a).
+3. Does not apply: add-to-selection stays Shift + click (1a).
+4. Does not apply: add-to-selection stays Shift + click (1a).
+5. The Shift box adds, as today.
+6. Shift + click toggle is kept.
+7. The Shift box starts only on empty space, as today.
+8. The near-a-part fallback is removed for selecting and grabbing (owner,
+   2a).
+9. Align and Mirror: left-drag on empty space spins.
+10. The modifier swaps stay on.
+11. The 2D sketch view is unchanged.
+12. Touch is unchanged and not in scope.
+13. SWEEP: independent, additive, clear of do-not-touch paths. STANDALONE:
+    touches do-not-touch or fragile paths or deploys, or is plainly hard.
+    This change was STANDALONE and got its own pass.
+
+### Builder's notes on the answers, 2026-09-28
+
+- Answer 8 and answer 12 meet in one place. The fallback was reached by
+  touch through the same code as the mouse. It is removed for the mouse and
+  left in place for touch, so that touch stays exactly as it was.
+- "Least sure" item 1 is settled. Checked live before any edit:
+  Ctrl + left-drag and Cmd + left-drag both **spin** the view, from empty
+  space and from over a part. The trace was right.
+- One line of section b was wrong. It says the camera is unchanged in every
+  mode. Checked live, in Ruler add mode a right-drag does not move the
+  camera: the pending measurement point follows the pointer and takes the
+  press before the canvas sees it. This was so before the change and is so
+  after it.
+
+The build is in `reference/reports/viewport-mouse-controls-build.md`.
