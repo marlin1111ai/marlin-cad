@@ -14,14 +14,16 @@ notebook wins and this brief is stale.
 - Repo: `/Apps/marlin-cad` on the Linux dev box. Remote is SSH:
   `git@github.com:marlin1111ai/marlin-cad.git`, branch `main`. It is a fork
   of `Formsmith746/SketchForge-3D`.
-- **HEAD at handoff is the commit that adds this brief**, whose parent is
-  `0803ac0`. `git log -1` shows the exact SHA; local `main` and
-  `origin/main` were equal when it was pushed.
+- **HEAD at handoff is the commit after `6ab706f`.** `6ab706f` added this
+  brief on top of `0803ac0`; the commit after it corrects one line of the
+  audit report and this paragraph. `git log -1` shows the exact SHA; local
+  `main` and `origin/main` were equal when it was pushed.
 - History of 2026-09-27, oldest first: `742dcb1` label test piece;
   `e40575f` label rulings and two lessons; `6f8813f` CI timeout fix;
   `6765ec8` label print result; `b1cbb5f` Gridfinity foot test piece;
   `586033e` Gridfinity Socket Tray; `9afa443` deploy record and backup rule;
-  `0803ac0` print result; then this handoff commit.
+  `0803ac0` print result; `6ab706f` notebook brought current and this brief
+  added; then the handoff commit.
 
 ## 2. How work runs here
 
@@ -107,7 +109,8 @@ edit none of them.
 ## 7. Test suite
 
 739 tests passing across 58 files (`npm test`, 2026-09-27, on `0803ac0`);
-typecheck clean. CI was green on `0803ac0` (run `36366729234`).
+typecheck clean, re-run on `6ab706f` with the same result. CI was green on
+`6ab706f` (run `36367776733`).
 
 ## 8. This session's decisions
 
@@ -140,8 +143,8 @@ is the list to update.
 
 `reference/reports/audit-2026-09-27.md`: the audit made at `0803ac0`, and
 the follow-up pass that recorded, corrected or closed its items 26 to 75
-and deleted its leftovers 1 to 9. That follow-up pass is the commit that
-adds this brief.
+and deleted its leftovers 1 to 9. That follow-up pass is `6ab706f` and the
+commit after it.
 
 ## 11. Open questions
 
