@@ -94,7 +94,7 @@ import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceF
 import { findSketchOutlineIntersection } from "@/lib/sketchProfileValidation";
 import { buildSketchRevolveMesh, DEFAULT_SKETCH_REVOLVE_SETTINGS, normalizeSketchRevolveSettings, type SketchRevolveMesh } from "@/lib/sketchRevolve";
 import { exportSkfProject, SKF_MEDIA_TYPE } from "@/lib/skfProject";
-import { createMountedScrewdriverTrayGeometryForShape, createMountedSocketTrayGeometryForShape, createMulticonnectGeometryForShape, createScrewdriverTrayGeometryForShape, createSocketTrayGeometryForShape, makeShapeFromAsset, sceneShape, toolbarShapeAssetGroups, type ToolbarShapeAsset, type ToolbarShapeAssetGroup } from "@/lib/shapeCatalog";
+import { createGridfinitySocketTrayGeometryForShape, createMountedScrewdriverTrayGeometryForShape, createMountedSocketTrayGeometryForShape, createMulticonnectGeometryForShape, createScrewdriverTrayGeometryForShape, createSocketTrayGeometryForShape, makeShapeFromAsset, sceneShape, toolbarShapeAssetGroups, type ToolbarShapeAsset, type ToolbarShapeAssetGroup } from "@/lib/shapeCatalog";
 import { importExtensionSupported } from "@/lib/importExtensions";
 import { importedShapeFromStl } from "@/lib/stlImport";
 import { exportMeshesToStl } from "@/lib/stlExport";
@@ -2288,6 +2288,11 @@ function buildGeometryMeshForShape(shape: WorkplaneShape): MeshData | null {
       // Same shared-cache-then-clone pattern; the helper falls back to the
       // bare tray on an invalid mid-edit layout rather than throwing.
       geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () => createMountedScrewdriverTrayGeometryForShape(shape)).clone();
+      break;
+    case "gridfinitySocketTray":
+      // Same shared-cache-then-clone pattern; the helper falls back to the
+      // bare tray on an invalid mid-edit layout rather than throwing.
+      geometry = sharedShapeGeometry(shapeGeometrySignature(shape), () => createGridfinitySocketTrayGeometryForShape(shape)).clone();
       break;
     case "polygon":
       geometry = new THREE.CylinderGeometry(1, 1, height, 6);

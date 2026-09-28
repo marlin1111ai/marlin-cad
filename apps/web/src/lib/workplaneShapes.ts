@@ -137,6 +137,7 @@ export function fallbackSolidColor(shape: WorkplaneShape) {
   if (shape.kind === "mountedSocketTray") return "#0ea5a4";
   if (shape.kind === "screwdriverTray") return "#db2777";
   if (shape.kind === "mountedScrewdriverTray") return "#7c3aed";
+  if (shape.kind === "gridfinitySocketTray") return "#0d9488";
   return "#d41721";
 }
 
@@ -264,6 +265,11 @@ export function workplaneShapesEqual(a: WorkplaneShape, b: WorkplaneShape) {
     a.mountedScrewdriverTrayThickness === b.mountedScrewdriverTrayThickness &&
     a.mountedScrewdriverTrayHoles === b.mountedScrewdriverTrayHoles &&
     a.mountedScrewdriverTrayCornerRadius === b.mountedScrewdriverTrayCornerRadius &&
+    a.gridfinityTraySquaresX === b.gridfinityTraySquaresX &&
+    a.gridfinityTraySquaresZ === b.gridfinityTraySquaresZ &&
+    a.gridfinityTrayCornerRadius === b.gridfinityTrayCornerRadius &&
+    a.gridfinityTrayLabelStyle === b.gridfinityTrayLabelStyle &&
+    a.gridfinityTrayHoles === b.gridfinityTrayHoles &&
     a.text === b.text &&
     a.font === b.font &&
     a.importedMesh === b.importedMesh &&

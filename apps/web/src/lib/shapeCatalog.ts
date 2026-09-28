@@ -15,6 +15,21 @@ import {
   openConnectContainerDimensions,
 } from "@/lib/openConnectContainerGeometry";
 import { DEFAULT_OPENGRID_SNAP_BOARD_TYPE, DEFAULT_OPENGRID_SNAP_BODY_SHAPE, openGridSnapDimensions } from "@/lib/openGridSnapGeometry";
+import { GRIDFINITY_FOOT_TOP_RADIUS } from "@/lib/gridfinityFootGeometry";
+import {
+  createGridfinitySocketTrayGeometry,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_CORNER_RADIUS,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_LABEL_STYLE,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_X,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_Z,
+  GRIDFINITY_SOCKET_TRAY_BED_SIZE,
+  GRIDFINITY_SOCKET_TRAY_EDGE_CLEARANCE,
+  GRIDFINITY_SOCKET_TRAY_GAP,
+  MAX_GRIDFINITY_SOCKET_TRAY_SQUARES,
+  gridfinitySocketTrayDimensions,
+  gridfinitySocketTrayLayout,
+  type GridfinitySocketTrayOptions,
+} from "@/lib/gridfinitySocketTrayGeometry";
 import {
   createMountedSocketTrayGeometry,
   mountedSocketTrayDimensions,
@@ -72,12 +87,13 @@ import {
   type SocketTrayOptions,
 } from "@/lib/socketTrayGeometry";
 import { shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
-import type { MountedScrewdriverTrayShapeHole, MountedSocketTrayShapePocket, ScrewdriverTrayShapeHole, ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
+import type { GridfinitySocketTrayShapeHole, MountedScrewdriverTrayShapeHole, MountedSocketTrayShapePocket, ScrewdriverTrayShapeHole, ShapeAsset, SocketTrayShapePocket, WorkplaneShape } from "@/types/sketchforge";
 
 export type ToolbarShapeAsset = ShapeAsset & { menuIcon: string; category?: string };
 
 const BASIC_SHAPES_CATEGORY = "Basic Shapes";
 const OPENGRID_CATEGORY = "OpenGrid";
+const GRIDFINITY_CATEGORY = "Gridfinity";
 
 export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   { id: "box", name: "Box", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "box", color: "#d41721", category: BASIC_SHAPES_CATEGORY },
@@ -132,6 +148,12 @@ export const toolbarShapeAssets: ToolbarShapeAsset[] = [
   // stand-in, one catalog entry in the OpenGrid section; the hole list is
   // edited in the inspector (MountedScrewdriverTrayHoleCard).
   { id: "mounted-screwdriver-tray", name: "Mounted Screwdriver Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "mountedScrewdriverTray", color: "#7c3aed", category: OPENGRID_CATEGORY },
+  // Gridfinity Socket Tray: a Gridfinity-footed tray sized in whole squares,
+  // with round blind holes and a text label in front of each. Same box-icon
+  // stand-in; it is the one entry of its own Gridfinity section, which the
+  // insert menu shows as a labeled section like the parts-library groups. The
+  // hole list is edited in the inspector (GridfinitySocketTrayHoleCard).
+  { id: "gridfinity-socket-tray", name: "Gridfinity Socket Tray", src: "assets/sketchforge/shape-icons-gray/box.png", menuIcon: "assets/sketchforge/shape-icons-gray/box.png", kind: "gridfinitySocketTray", color: "#0d9488", category: GRIDFINITY_CATEGORY },
   // Built-in parts library (multiconnectPresets.ts): each preset is a normal
   // multiconnectContainer entry whose presetId makes makeShapeFromAsset
   // pre-fill the inserted shape. Presets group under their own labeled
@@ -324,6 +346,132 @@ export function screwdriverTrayLayoutError(shape: WorkplaneShape): string | null
     if (invalid) return `Hole ${Number(invalid[1]) + 1} has invalid values.`;
     return message;
   }
+}
+
+// Insert defaults for the Gridfinity Socket Tray (reference/DECISIONS.md,
+// 2026-09-27): 3 x 2 Gridfinity squares -- 3 wide, 2 deep, 125.5 x 83.5mm --
+// with three holes labelled "8mm", "10mm" and "12mm". The diameters are the
+// recorded finished pocket diameters for those sockets from
+// reference/socket-tray-sampler-report.md's confirmed mapping (15mm holds the
+// 7 / 8 / 9mm sockets, 19mm the 10 / 11 / 12mm), not a lookup the app does.
+//
+// The holes sit in one evenly spaced row: x at the centres of the three square
+// columns (42mm pitch, 20.75mm from either end) and z on the tray's depth
+// centreline. Every label clears its guards there with room to spare.
+export const DEFAULT_GRIDFINITY_SOCKET_TRAY_SHAPE_HOLES: ReadonlyArray<GridfinitySocketTrayShapeHole> = [
+  { diameter: 15, x: 20.75, z: 41.75, label: "8mm" },
+  { diameter: 19, x: 62.75, z: 41.75, label: "10mm" },
+  { diameter: 19, x: 104.75, z: 41.75, label: "12mm" },
+];
+
+// The single shape -> geometry-options mapping for the Gridfinity Socket Tray:
+// the viewport arm, the editor's export arm, and the inspector's validation
+// all go through this. The tray's size comes from its square counts, never
+// from shape.width / shape.depth, which are derived from them. Hole x / z stay
+// as typed (from the left edge and from the FRONT edge); the geometry module
+// turns z into geometry space itself.
+export function gridfinitySocketTrayOptionsForShape(shape: WorkplaneShape): GridfinitySocketTrayOptions {
+  return {
+    squaresX: shape.gridfinityTraySquaresX,
+    squaresZ: shape.gridfinityTraySquaresZ,
+    cornerRadius: shape.gridfinityTrayCornerRadius,
+    labelStyle: shape.gridfinityTrayLabelStyle,
+    holes: (shape.gridfinityTrayHoles ?? []).map((hole) => ({ diameter: hole.diameter, x: hole.x, z: hole.z, label: hole.label })),
+  };
+}
+
+// The shape's derived width / depth / height: the footprint its squares give
+// and the overall height, which includes the labels where they are raised.
+// The inspector writes these back whenever the squares, the label setting or
+// the hole list change, so the selection frame matches the mesh. Falls back to
+// the default tray's size if the square counts themselves are rejected.
+export function gridfinitySocketTrayShapeSize(shape: WorkplaneShape): { width: number; depth: number; height: number } {
+  const options = gridfinitySocketTrayOptionsForShape(shape);
+  try {
+    const { width, depth, height } = gridfinitySocketTrayDimensions(options);
+    return { width, depth, height };
+  } catch {
+    const { width, depth, height } = gridfinitySocketTrayDimensions({ labelStyle: options.labelStyle === "recessed" ? "recessed" : "raised", holes: options.holes });
+    return { width, depth, height };
+  }
+}
+
+// The geometry module THROWS on an invalid layout. The render/export arms
+// must never crash on a half-edited one, so they fall back to the bare tray
+// (no holes, so no labels), then to sharp, then to the module's own defaults.
+// The inspector shows the validation message inline instead
+// (gridfinitySocketTrayLayoutError).
+export function createGridfinitySocketTrayGeometryForShape(shape: WorkplaneShape) {
+  const options = gridfinitySocketTrayOptionsForShape(shape);
+  try {
+    return createGridfinitySocketTrayGeometry(options);
+  } catch {
+    try {
+      return createGridfinitySocketTrayGeometry({ ...options, holes: [] });
+    } catch {
+      try {
+        return createGridfinitySocketTrayGeometry({ ...options, cornerRadius: 0, holes: [] });
+      } catch {
+        return createGridfinitySocketTrayGeometry({});
+      }
+    }
+  }
+}
+
+// Friendly inline message for the inspector: null when the layout is valid,
+// otherwise the geometry module's rejection translated to 1-based hole numbers
+// and plain language. Nothing is moved or dropped to make a layout fit.
+export function gridfinitySocketTrayLayoutError(shape: WorkplaneShape): string | null {
+  const options = gridfinitySocketTrayOptionsForShape(shape);
+  try {
+    gridfinitySocketTrayLayout(options);
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const edge = GRIDFINITY_SOCKET_TRAY_EDGE_CLEARANCE;
+    const gap = GRIDFINITY_SOCKET_TRAY_GAP;
+    const bed = message.match(/is (\d+) squares (wide|deep) \(([\d.]+)mm\), which does not fit/);
+    if (bed) return `${bed[1]} squares ${bed[2]} is ${bed[3]}mm, which does not fit the ${GRIDFINITY_SOCKET_TRAY_BED_SIZE}mm bed — the most that fits is ${MAX_GRIDFINITY_SOCKET_TRAY_SQUARES} squares.`;
+    if (/must be a whole number of squares/.test(message)) return "Squares must be a whole number, 1 or more.";
+    if (/corner radius .*plan corner radius/.test(message)) return `Corner Radius must be less than ${GRIDFINITY_FOOT_TOP_RADIUS}mm, the radius of the tray's own rounded corners — reduce Corner Radius.`;
+    if (/corner radius must be zero or positive/.test(message)) return "Corner Radius must be zero or more.";
+    const widensEdge = message.match(/corner radius .*widens hole (\d+) .* edge/);
+    if (widensEdge) return `Corner Radius widens Hole ${Number(widensEdge[1]) + 1} to within ${edge}mm of the tray edge — reduce Corner Radius or move the hole.`;
+    const widensNeighbor = message.match(/corner radius .*widens hole (\d+) too close to hole (\d+)/);
+    if (widensNeighbor) return `Corner Radius widens Hole ${Number(widensNeighbor[1]) + 1} too close to Hole ${Number(widensNeighbor[2]) + 1} — reduce Corner Radius or space the holes further apart.`;
+    const overlap = message.match(/holes (\d+) and (\d+): footprints overlap/);
+    if (overlap) return `Holes ${Number(overlap[1]) + 1} and ${Number(overlap[2]) + 1} overlap or leave too thin a wall — keep at least ${gap}mm between them.`;
+    const holeEdge = message.match(/hole (\d+): footprint .* edge/);
+    if (holeEdge) return `Hole ${Number(holeEdge[1]) + 1} is too close to the tray edge (${edge}mm clearance is required).`;
+    const invalid = message.match(/hole (\d+): diameter/);
+    if (invalid) return `Hole ${Number(invalid[1]) + 1} has invalid values.`;
+    const characters = message.match(/label (\d+): .* only the characters (\S+) are supported/);
+    if (characters) return `Hole ${Number(characters[1]) + 1}'s label can only use the characters ${characters[2]}.`;
+    const labelEdge = message.match(/label (\d+) \("([^"]*)"\) is within .* tray edge/);
+    if (labelEdge) return `Hole ${Number(labelEdge[1]) + 1}'s label "${labelEdge[2]}" is too close to the tray edge (${edge}mm clearance is required) — move the hole or shorten the label.`;
+    const labelHole = message.match(/label (\d+) \("([^"]*)"\) is within .* of hole (\d+)/);
+    if (labelHole) return `Hole ${Number(labelHole[1]) + 1}'s label "${labelHole[2]}" is too close to Hole ${Number(labelHole[3]) + 1} — keep at least ${gap}mm between them.`;
+    const labels = message.match(/labels (\d+) and (\d+) \("([^"]*)" and "([^"]*)"\)/);
+    if (labels) return `The labels of Holes ${Number(labels[1]) + 1} and ${Number(labels[2]) + 1} ("${labels[3]}" and "${labels[4]}") are too close together — keep at least ${gap}mm between them.`;
+    return message;
+  }
+}
+
+// What Add Hole inserts (reference/DECISIONS.md, 2026-09-27): a copy of the
+// last hole placed just to its right -- the nearest spot the hole-spacing
+// guard allows, on the same z -- with a blank label. Nothing else is checked
+// here: if that spot is off the tray or crowds something, the inline error
+// says so and the owner moves the hole. With no holes yet, a first hole at the
+// centre of the first square column on the depth centreline.
+export function nextGridfinitySocketTrayHole(shape: WorkplaneShape): GridfinitySocketTrayShapeHole {
+  const holes = shape.gridfinityTrayHoles ?? [];
+  const last = holes[holes.length - 1];
+  if (!last) {
+    const { depth } = gridfinitySocketTrayShapeSize(shape);
+    return { diameter: DEFAULT_GRIDFINITY_SOCKET_TRAY_SHAPE_HOLES[0].diameter, x: DEFAULT_GRIDFINITY_SOCKET_TRAY_SHAPE_HOLES[0].x, z: depth / 2, label: "" };
+  }
+  const cornerRadius = Math.max(0, shape.gridfinityTrayCornerRadius ?? DEFAULT_GRIDFINITY_SOCKET_TRAY_CORNER_RADIUS);
+  return { diameter: last.diameter, x: last.x + last.diameter + 2 * cornerRadius + GRIDFINITY_SOCKET_TRAY_GAP, z: last.z, label: "" };
 }
 
 // Insert defaults for the Mounted Screwdriver Tray. The plate numbers are the
@@ -667,14 +815,24 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
   const socketTrayDefaults = asset.kind === "socketTray" ? socketTrayDimensions({}) : undefined;
   const screwdriverTrayDefaults = asset.kind === "screwdriverTray" ? screwdriverTrayDimensions({}) : undefined;
   const mountedScrewdriverTrayDefaults = asset.kind === "mountedScrewdriverTray" ? mountedScrewdriverTrayDimensions({}) : undefined;
+  // Gridfinity Socket Tray: the size its default squares give; height is the
+  // overall height, which includes the default insert's raised labels.
+  const gridfinitySocketTrayDefaults = asset.kind === "gridfinitySocketTray"
+    ? gridfinitySocketTrayDimensions({
+        squaresX: DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_X,
+        squaresZ: DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_Z,
+        labelStyle: DEFAULT_GRIDFINITY_SOCKET_TRAY_LABEL_STYLE,
+        holes: DEFAULT_GRIDFINITY_SOCKET_TRAY_SHAPE_HOLES.map((hole) => ({ ...hole })),
+      })
+    : undefined;
   // Mounted Socket Tray: plate width/height straight from the module's
   // defaults; `depth` is the solid's full Z extent (tray projection + plate
   // thickness), so the selection frame matches the mesh.
   const mountedSocketTrayDefaults = asset.kind === "mountedSocketTray" ? mountedSocketTrayDimensions({}) : undefined;
   const size = asset.kind === "gear" ? 30 : roundProfile ? 22 : 20;
-  const height = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.height : openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : screwdriverTrayDefaults ? screwdriverTrayDefaults.thickness : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
-  const width = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.width : openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : screwdriverTrayDefaults ? screwdriverTrayDefaults.width : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.width : asset.kind === "text" ? 86 : size;
-  const depth = mountedSocketTrayDefaults ? mountedSocketTrayDefaults.depth : openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : screwdriverTrayDefaults ? screwdriverTrayDefaults.depth : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.depth : asset.kind === "text" ? 28 : size;
+  const height = gridfinitySocketTrayDefaults ? gridfinitySocketTrayDefaults.height : mountedSocketTrayDefaults ? mountedSocketTrayDefaults.height : openGridBoardDefaults ? openGridBoardDefaults.height : openConnectContainerDefaults ? openConnectContainerDefaults.height : openGridSnapDefaults ? openGridSnapDefaults.height : multiconnectDefaults ? multiconnectDefaults.height : socketTrayDefaults ? socketTrayDefaults.thickness : screwdriverTrayDefaults ? screwdriverTrayDefaults.thickness : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.height : asset.kind === "gear" ? 6 : asset.kind === "text" ? 10 : asset.kind === "roundRoof" ? 10 : asset.kind === "halfSphere" ? 11 : flatProfile ? 5 : 20;
+  const width = gridfinitySocketTrayDefaults ? gridfinitySocketTrayDefaults.width : mountedSocketTrayDefaults ? mountedSocketTrayDefaults.width : openGridBoardDefaults ? openGridBoardDefaults.width : openConnectContainerDefaults ? openConnectContainerDefaults.width : openGridSnapDefaults ? openGridSnapDefaults.width : multiconnectDefaults ? multiconnectDefaults.width : socketTrayDefaults ? socketTrayDefaults.width : screwdriverTrayDefaults ? screwdriverTrayDefaults.width : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.width : asset.kind === "text" ? 86 : size;
+  const depth = gridfinitySocketTrayDefaults ? gridfinitySocketTrayDefaults.depth : mountedSocketTrayDefaults ? mountedSocketTrayDefaults.depth : openGridBoardDefaults ? openGridBoardDefaults.depth : openConnectContainerDefaults ? openConnectContainerDefaults.depth : openGridSnapDefaults ? openGridSnapDefaults.depth : multiconnectDefaults ? multiconnectDefaults.depth : socketTrayDefaults ? socketTrayDefaults.depth : screwdriverTrayDefaults ? screwdriverTrayDefaults.depth : mountedScrewdriverTrayDefaults ? mountedScrewdriverTrayDefaults.depth : asset.kind === "text" ? 28 : size;
 
   const shape: WorkplaneShape = {
     id: createLocalId(asset.id),
@@ -749,6 +907,11 @@ export function makeShapeFromAsset(asset: ShapeAsset, point?: { x: number; z: nu
     mountedScrewdriverTrayThickness: asset.kind === "mountedScrewdriverTray" ? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_THICKNESS : undefined,
     mountedScrewdriverTrayHoles: asset.kind === "mountedScrewdriverTray" ? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_SHAPE_HOLES.map((hole) => ({ ...hole })) : undefined,
     mountedScrewdriverTrayCornerRadius: asset.kind === "mountedScrewdriverTray" ? DEFAULT_MOUNTED_SCREWDRIVER_TRAY_CORNER_RADIUS : undefined,
+    gridfinityTraySquaresX: asset.kind === "gridfinitySocketTray" ? DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_X : undefined,
+    gridfinityTraySquaresZ: asset.kind === "gridfinitySocketTray" ? DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_Z : undefined,
+    gridfinityTrayCornerRadius: asset.kind === "gridfinitySocketTray" ? DEFAULT_GRIDFINITY_SOCKET_TRAY_CORNER_RADIUS : undefined,
+    gridfinityTrayLabelStyle: asset.kind === "gridfinitySocketTray" ? DEFAULT_GRIDFINITY_SOCKET_TRAY_LABEL_STYLE : undefined,
+    gridfinityTrayHoles: asset.kind === "gridfinitySocketTray" ? DEFAULT_GRIDFINITY_SOCKET_TRAY_SHAPE_HOLES.map((hole) => ({ ...hole })) : undefined,
     mountedTrayPlateThickness: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_PLATE_THICKNESS : undefined,
     mountedTraySlotSpacing: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_SPACING : undefined,
     mountedTraySlotCount: asset.kind === "mountedSocketTray" ? DEFAULT_MOUNTED_SOCKET_TRAY_SLOT_COUNT : undefined,

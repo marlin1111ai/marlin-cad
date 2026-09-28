@@ -36,6 +36,7 @@ import { createOpenGridSnapGeometry } from "@/lib/openGridSnapGeometry";
 import { createMountedSocketTrayGeometryForShape } from "@/lib/shapeCatalog";
 import { createScrewdriverTrayGeometryForShape } from "@/lib/shapeCatalog";
 import { createMountedScrewdriverTrayGeometryForShape } from "@/lib/shapeCatalog";
+import { createGridfinitySocketTrayGeometryForShape } from "@/lib/shapeCatalog";
 import { createMulticonnectGeometryForShape, createSocketTrayGeometryForShape } from "@/lib/shapeCatalog";
 import {
   horizontalPlacementWorkplane,
@@ -990,6 +991,11 @@ export function shapeGeometrySignature(shape: WorkplaneShape): string {
     mountedScrewdriverTrayThickness: shape.mountedScrewdriverTrayThickness,
     mountedScrewdriverTrayHoles: shape.mountedScrewdriverTrayHoles,
     mountedScrewdriverTrayCornerRadius: shape.mountedScrewdriverTrayCornerRadius,
+    gridfinityTraySquaresX: shape.gridfinityTraySquaresX,
+    gridfinityTraySquaresZ: shape.gridfinityTraySquaresZ,
+    gridfinityTrayCornerRadius: shape.gridfinityTrayCornerRadius,
+    gridfinityTrayLabelStyle: shape.gridfinityTrayLabelStyle,
+    gridfinityTrayHoles: shape.gridfinityTrayHoles,
     text: shape.text,
     font: shape.font,
   });
@@ -7296,6 +7302,12 @@ function createShapeObject(
       // shelf), same mapping-helper pattern, same bare-tray fallback.
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createMountedScrewdriverTrayGeometryForShape(shape)), material, shape);
       break;
+    case "gridfinitySocketTray":
+      // The Gridfinity-footed labelled tray: same mapping-helper pattern as
+      // socketTray above, same bare-tray fallback on an invalid mid-edit
+      // layout.
+      addMesh(group, sharedShapeGeometry(geometryCacheKey, () => createGridfinitySocketTrayGeometryForShape(shape)), material, shape);
+      break;
     case "polygon":
       addMesh(group, sharedShapeGeometry(geometryCacheKey, () => new THREE.CylinderGeometry(1, 1, 1, 6)), material, shape, undefined, undefined, new THREE.Vector3(width / 2, height, depth / 2));
       break;
@@ -7414,7 +7426,7 @@ function addShapeEdgeDecorations(group: THREE.Group, mesh: THREE.Mesh, prepared:
   const complexEdges =
     shape.kind === "mesh" ||
     Boolean(shape.importedMesh) ||
-    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer", "socketTray", "mountedSocketTray", "screwdriverTray", "mountedScrewdriverTray"].includes(shape.kind);
+    ["cone", "pyramid", "roof", "roundRoof", "halfSphere", "torus", "tube", "ring", "gear", "wedge", "openGridBoard", "openConnectContainer", "openGridSnap", "multiconnectContainer", "socketTray", "mountedSocketTray", "screwdriverTray", "mountedScrewdriverTray", "gridfinitySocketTray"].includes(shape.kind);
   const importedTriangleCount = shape.importedMesh?.triangleCount ?? 0;
   const skipHeavyImportedEdges = Boolean(shape.importedMesh) && importedTriangleCount > IMPORTED_SELECTED_EDGE_TRIANGLE_LIMIT;
   if ((group.userData.showEdges || complexEdges) && !skipHeavyImportedEdges) {

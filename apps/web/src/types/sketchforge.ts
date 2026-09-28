@@ -25,7 +25,8 @@ export type ShapeKind =
   | "socketTray"
   | "mountedSocketTray"
   | "screwdriverTray"
-  | "mountedScrewdriverTray";
+  | "mountedScrewdriverTray"
+  | "gridfinitySocketTray";
 
 export type ShapeAsset = {
   id: string;
@@ -173,6 +174,14 @@ export type MountedSocketTrayShapePocket = { diameter: number; x: number; z: num
 // shared or per-row: the bore goes all the way through, so its depth is the
 // tray thickness.
 export type ScrewdriverTrayShapeHole = { diameter: number; x: number; z: number };
+
+// One hole row in the inspector's Gridfinity Socket Tray hole list. `x` is
+// from the tray's LEFT edge and `z` from its FRONT edge -- the edge nearest
+// the viewer, which the labels read upright from. The geometry module turns
+// z into geometry space at one marked spot (gridfinitySocketTrayGeometry.ts,
+// normalizedHoles). `label` is the text printed in front of the hole; blank
+// means the hole gets no label. There is no depth: every hole is 14mm deep.
+export type GridfinitySocketTrayShapeHole = { diameter: number; x: number; z: number; label: string };
 
 // One hole row in the inspector's Mounted Screwdriver Tray hole list. `x` is in
 // AS-MOUNTED VIEW SPACE -- from the LEFT edge as the viewer standing in front
@@ -339,6 +348,19 @@ export type WorkplaneShape = {
   // every hole's TOP rim. 0 (default) = sharp. The bottom rim is always
   // sharp.
   screwdriverTrayCornerRadius?: number;
+  // Gridfinity Socket Tray (kind "gridfinitySocketTray"). The tray's size is
+  // typed in Gridfinity squares; width / depth / height are DERIVED from the
+  // squares and the label setting (height includes raised labels) and are
+  // kept in step by the inspector, so the selection frame matches the mesh.
+  // Body height and hole depth are fixed and have no field.
+  gridfinityTraySquaresX?: number;
+  gridfinityTraySquaresZ?: number;
+  // Owner-typed fillet radius, applied to every hole's top edge and the
+  // tray's top perimeter. 0 (default) = sharp.
+  gridfinityTrayCornerRadius?: number;
+  // One setting for every label on the tray.
+  gridfinityTrayLabelStyle?: "raised" | "recessed";
+  gridfinityTrayHoles?: GridfinitySocketTrayShapeHole[];
   // Mounted Screwdriver Tray (kind "mountedScrewdriverTray"). Plate width /
   // plate height live in width / height (height is the Y-up dimension); depth
   // holds the solid's full Z extent, i.e. tray projection + plate thickness, so

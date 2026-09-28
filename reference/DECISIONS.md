@@ -78,3 +78,17 @@ Design decisions and the reason for each.
   - The tray is registered in the editor, with the raised/recessed choice.
   - The raised/recessed setting applies to the whole tray. This is the foreman's reading of "when im making it"; the owner did not correct it.
   - The foot test piece is 2 × 1 Gridfinity squares. This is the foreman's call.
+- **The Gridfinity foot test piece printed and passed.** Owner's report, 2026-09-27. The owner printed `test-prints/gridfinity-foot-test-piece.stl`, checked it in his Gridfinity baseplate, and reported "looks good".
+- **Gridfinity Socket Tray: the build answers.** Recorded 2026-09-27. Each item is marked as the owner's answer or the foreman's call.
+  - Owner's answer: the floor under the holes is 4mm. Body height is fixed, not typed.
+  - Owner's answer: the default insert is 3 × 2 squares (3 wide, 2 deep) with three holes labelled "8mm", "10mm" and "12mm". Hole diameters are the recorded finished pocket diameters for those sockets from `reference/socket-tray-sampler-report.md`. Corner Radius is 0.
+  - Owner's answer: labels keep the same spacing as holes: 4mm from the tray edge, 3mm from other holes and labels. When anything violates this, the app shows an inline error like the other guards; nothing moves automatically. A hole with blank label text gets no label.
+  - Owner's answer: Add Hole copies the last hole and places it just to its right, with a blank label.
+  - Owner's answer: hole X/Z is measured from the front edge (nearest the viewer), as on the flat trays. Each label sits between its hole and the front edge, reading upright from the front.
+  - Foreman's call: hole depth is fixed at 14mm, with no inspector row.
+  - Foreman's call: the maximum tray size is what fits the X1C bed (256mm).
+  - Foreman's call: the Corner Radius limit is whatever keeps the shape valid, shown as an inline error.
+  - Foreman's call: each label is centred under its hole.
+  - Foreman's call: the shape's menu name is "Gridfinity Socket Tray", in its own Gridfinity section.
+  - Foreman's call: the three default holes sit in one evenly spaced row, placed so their labels satisfy the guards.
+  - Builder's note, 2026-09-27, on the front edge: this tray measures hole Z from the edge nearest the viewer, as the owner's answer says, and its labels sit between each hole and that edge. That edge is geometry Z = depth, so typed Z is turned into geometry space at one marked spot (`normalizedHoles` in `gridfinitySocketTrayGeometry.ts`: `z_geometry = depth - z_typed`); hole X is not mirrored. On the flat Socket Tray and the flat Screwdriver Tray, "Z from the front edge" means the module's Z = 0 edge, which is the FAR edge from the editor's home camera (`reference/reports/socket-tray-ui-build.md`, step 7 and open question 5). So this tray does not measure Z from the same edge as the flat trays. The flat trays were not changed.

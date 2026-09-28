@@ -85,7 +85,7 @@ import {
   normalizeMulticonnectSlotSpacing,
   normalizeMulticonnectSlotTolerance,
 } from "@/lib/multiconnectContainerGeometry";
-import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, mountedScrewdriverTrayLayoutError, mountedSocketTrayLayoutError, multiconnectPegLayoutError, screwdriverTrayLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
+import { DEFAULT_MULTICONNECT_PEG_LENGTH, DEFAULT_SOCKET_TRAY_SHAPE_POCKET_DEPTH, gridfinitySocketTrayLayoutError, gridfinitySocketTrayShapeSize, nextGridfinitySocketTrayHole, mountedScrewdriverTrayLayoutError, mountedSocketTrayLayoutError, multiconnectPegLayoutError, screwdriverTrayLayoutError, socketTrayLayoutError } from "@/lib/shapeCatalog";
 import {
   DEFAULT_MOUNTED_SCREWDRIVER_TRAY_CORNER_RADIUS,
   DEFAULT_MOUNTED_SCREWDRIVER_TRAY_DEPTH,
@@ -97,6 +97,14 @@ import {
   MIN_MOUNTED_SCREWDRIVER_TRAY_SLOT_COUNT,
 } from "@/lib/mountedScrewdriverTrayGeometry";
 import { DEFAULT_SCREWDRIVER_TRAY_CORNER_RADIUS, MIN_SCREWDRIVER_TRAY_THICKNESS } from "@/lib/screwdriverTrayGeometry";
+import {
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_CORNER_RADIUS,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_LABEL_STYLE,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_X,
+  DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_Z,
+  MAX_GRIDFINITY_SOCKET_TRAY_SQUARES,
+} from "@/lib/gridfinitySocketTrayGeometry";
+import { LABEL_CHARACTERS } from "@/lib/labelSlabGeometry";
 import { DEFAULT_SOCKET_TRAY_CORNER_RADIUS, MIN_SOCKET_TRAY_FLOOR_THICKNESS, SOCKET_TRAY_POCKET_EDGE_CLEARANCE } from "@/lib/socketTrayGeometry";
 import { resizedShapeSize, shapeDepth, shapeWidth } from "@/lib/workplaneShapes";
 import { normalizeSketchRevolveSettings } from "@/lib/sketchRevolve";
@@ -478,6 +486,29 @@ function getShapeProperties(shape: WorkplaneShape, onUpdate: ShapeInspectorUpdat
       { label: "Depth", value: depth, min: minFootprint, max: 320, step: 0.5, onChange: setDepth },
       { label: "Thickness", value: shape.height, min: MIN_SCREWDRIVER_TRAY_THICKNESS, max: 60, step: 0.5, onChange: setHeight },
       { label: "Corner Radius", value: shape.screwdriverTrayCornerRadius ?? DEFAULT_SCREWDRIVER_TRAY_CORNER_RADIUS, min: 0, max: 20, step: 0.5, onChange: (value) => onUpdate({ screwdriverTrayCornerRadius: value }) },
+    ];
+  }
+
+  if (shape.kind === "gridfinitySocketTray") {
+    // The tray's size is typed in whole Gridfinity squares; width / depth /
+    // height are derived and written back alongside, the way the OpenGrid
+    // Board's grid rows do. Body height and hole depth are fixed and have no
+    // row. The square rows stop at what fits the 256mm bed; every other
+    // guard (edge, spacing, labels, Corner Radius) is reported inline by the
+    // hole card rather than clamped here.
+    const squaresX = shape.gridfinityTraySquaresX ?? DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_X;
+    const squaresZ = shape.gridfinityTraySquaresZ ?? DEFAULT_GRIDFINITY_SOCKET_TRAY_SQUARES_Z;
+    const labelStyle = shape.gridfinityTrayLabelStyle ?? DEFAULT_GRIDFINITY_SOCKET_TRAY_LABEL_STYLE;
+    const applyTrayPatch = (patch: Partial<WorkplaneShape>, resizeAxis: "width" | "depth" | "height") => {
+      const size = gridfinitySocketTrayShapeSize({ ...shape, ...patch });
+      onUpdate({ ...patch, ...size, size: resizedShapeSize(size.width, size.depth) }, { resizeAxis });
+    };
+    const clampSquares = (value: number) => Math.min(MAX_GRIDFINITY_SOCKET_TRAY_SQUARES, Math.max(1, Math.round(value)));
+    return [
+      { label: "Squares Wide", value: squaresX, min: 1, max: MAX_GRIDFINITY_SOCKET_TRAY_SQUARES, step: 1, onChange: (value) => applyTrayPatch({ gridfinityTraySquaresX: clampSquares(value) }, "width") },
+      { label: "Squares Deep", value: squaresZ, min: 1, max: MAX_GRIDFINITY_SOCKET_TRAY_SQUARES, step: 1, onChange: (value) => applyTrayPatch({ gridfinityTraySquaresZ: clampSquares(value) }, "depth") },
+      { label: "Corner Radius", value: shape.gridfinityTrayCornerRadius ?? DEFAULT_GRIDFINITY_SOCKET_TRAY_CORNER_RADIUS, min: 0, max: 5, step: 0.25, onChange: (value) => onUpdate({ gridfinityTrayCornerRadius: value }) },
+      { type: "select", label: "Labels", value: labelStyle === "recessed" ? "Recessed" : "Raised", options: ["Raised", "Recessed"], onChange: (value) => applyTrayPatch({ gridfinityTrayLabelStyle: value === "Recessed" ? "recessed" : "raised" }, "height") },
     ];
   }
 
@@ -888,6 +919,9 @@ export function ShapeInspector({
       {shape.kind === "mountedScrewdriverTray" ? (
         <MountedScrewdriverTrayHoleCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
       ) : null}
+      {shape.kind === "gridfinitySocketTray" ? (
+        <GridfinitySocketTrayHoleCard shape={shape} workspace={workspace} disabled={locked} onUpdate={onUpdate} onInteractionActiveChange={onInteractionActiveChange} />
+      ) : null}
       {gearType === "helical" ? (
         <div className={`property-card ${gearHelixOpen ? "" : "collapsed"}`}>
           <button
@@ -1195,6 +1229,114 @@ function ScrewdriverTrayHoleCard({
             </p>
           ) : null}
           <button className="inspector-action-button" type="button" disabled={disabled} onClick={addHole}>
+            <span>Add Hole</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Hole list editor for the Gridfinity Socket Tray -- the same shape as
+// ScrewdriverTrayHoleCard above, plus a Label text field per hole. Each row is
+// a diameter, an (x, z) center -- x from the tray's LEFT edge, z from its
+// FRONT edge, the edge nearest the viewer -- and the text printed in front of
+// the hole. A blank label means no label. There is no depth control: every
+// hole is 14mm deep. Layout mistakes (overlap, edge crowding, labels too close
+// to anything, a Corner Radius with nowhere to go) don't crash anything and
+// nothing is moved to fix them: the viewport falls back to the bare tray and
+// the geometry module's rejection shows here as an inline message.
+function GridfinitySocketTrayHoleCard({
+  shape,
+  workspace,
+  disabled,
+  onUpdate,
+  onInteractionActiveChange,
+}: {
+  shape: WorkplaneShape;
+  workspace: WorkplaneWorkspaceSettings;
+  disabled?: boolean;
+  onUpdate: ShapeInspectorUpdate;
+  onInteractionActiveChange?: (active: boolean) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const holes = shape.gridfinityTrayHoles ?? [];
+  const { width: trayWidth, depth: trayDepth } = gridfinitySocketTrayShapeSize(shape);
+  const layoutError = gridfinitySocketTrayLayoutError(shape);
+  // The overall height includes raised labels, so it can change when the
+  // first label appears or the last one goes.
+  const setHoles = (next: NonNullable<WorkplaneShape["gridfinityTrayHoles"]>) =>
+    onUpdate({ gridfinityTrayHoles: next, height: gridfinitySocketTrayShapeSize({ ...shape, gridfinityTrayHoles: next }).height });
+  // Only the characters the printed label test piece vetted can be typed.
+  const labelText = (value: string) => Array.from(value.toLowerCase()).filter((character) => LABEL_CHARACTERS.includes(character)).join("");
+  return (
+    <div className={`property-card ${open ? "" : "collapsed"}`}>
+      <button
+        className="property-card-header"
+        type="button"
+        aria-expanded={open}
+        aria-controls={`gridfinity-socket-tray-holes-${shape.id}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>Holes</span>
+        <ChevronUp className={open ? "" : "collapsed"} size={25} strokeWidth={2.8} />
+      </button>
+      {open ? (
+        <div className="property-list" id={`gridfinity-socket-tray-holes-${shape.id}`}>
+          {holes.map((hole, index) => (
+            <div key={index}>
+              <RangeProperty
+                label={`Hole ${index + 1} Diameter`}
+                value={hole.diameter}
+                min={2}
+                max={60}
+                step={0.1}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(diameter) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, diameter } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Hole ${index + 1} X`}
+                value={hole.x}
+                min={0}
+                max={trayWidth}
+                step={0.25}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(x) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, x } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <RangeProperty
+                label={`Hole ${index + 1} Z`}
+                value={hole.z}
+                min={0}
+                max={trayDepth}
+                step={0.25}
+                workspace={workspace}
+                disabled={disabled}
+                onChange={(z) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, z } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <TextProperty
+                type="text"
+                label={`Hole ${index + 1} Label`}
+                value={hole.label ?? ""}
+                disabled={disabled}
+                onChange={(label) => setHoles(holes.map((entry, i) => (i === index ? { ...entry, label: labelText(label) } : entry)))}
+                onInteractionActiveChange={onInteractionActiveChange}
+              />
+              <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setHoles(holes.filter((_, i) => i !== index))}>
+                <span>Remove Hole {index + 1}</span>
+              </button>
+            </div>
+          ))}
+          {layoutError ? (
+            <p role="alert" style={{ color: "#e0524d", margin: "4px 2px", fontSize: "0.86em", lineHeight: 1.35 }}>
+              {layoutError}
+            </p>
+          ) : null}
+          <button className="inspector-action-button" type="button" disabled={disabled} onClick={() => setHoles([...holes, nextGridfinitySocketTrayHole(shape)])}>
             <span>Add Hole</span>
           </button>
         </div>
