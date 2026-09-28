@@ -394,7 +394,7 @@ trays are unchanged by this work.
   reported "it prints and works" (DECISIONS.md,
   `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`).
 
-## Viewport mouse controls — changed, and passed by the owner
+## Viewport mouse controls — changed, passed by the owner and deployed
 
 The 3D viewport's mouse movement was changed on 2026-09-28 to follow Bambu
 Studio's (DECISIONS.md, owner's answers 1a and 2a). The change is
@@ -435,9 +435,13 @@ Studio's (DECISIONS.md, owner's answers 1a and 2a). The change is
   machine. The owner opened `http://192.168.1.245:3000`.
 - Commits: `bf755c5` (the change, the notebook entries and the build
   report) and `d5c8af0` (the build report's line on the F key, corrected).
-- Not deployed. Production on Unraid is unchanged.
+- **Deployed to Unraid 2026-09-28** and checked by the owner in
+  production: "all good". The owner force-updated the `1.3.3` container to
+  the `0fc0b75` build. This line read "Not deployed" until then. The dev
+  server left running for the hands-on test was stopped the same day.
 - Full detail: `reference/reports/viewport-mouse-controls-recon.md`,
-  `reference/reports/viewport-mouse-controls-build.md`.
+  `reference/reports/viewport-mouse-controls-build.md`,
+  `reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`.
 
 ## Physical gate — both coupons are unprinted
 
@@ -459,6 +463,16 @@ unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Viewport mouse controls deployed to Unraid on 2026-09-28: the owner
+  force-updated the `1.3.3` container to the `0fc0b75` build and checked
+  the controls in production: "all good"
+  (`reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`).
+- **Released as `1.3.4`** (`c9a4c6d`, 2026-09-28): built and published, not
+  deployed.
+- Viewport mouse controls changed to follow Bambu Studio's movement
+  (`bf755c5`, with `d5c8af0` correcting one line of the build report), and
+  passed by the owner on his Mac (`0fc0b75`), all on 2026-09-28. Recon
+  first, in `020c8f0`.
 - Gridfinity Socket Tray, the fifth tray shape: built and registered
   (`586033e`), deployed to Unraid (`9afa443`,
   `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`) and
@@ -592,14 +606,27 @@ unprinted. Both coupons remain unprinted.
   `1.3.1`, which was pulled by the owner and verified working in the
   browser). `1.3.2` was never deployed. Docker runs on Unraid only — not on
   the Linux dev box, and the owner does not want it there.
-- **Since 2026-09-27 the container runs the image built from `586033e`**
-  (`sha256:d1c2c036e0eb6e29dd7d53dbe258b5bf24fa7f721f65c9bb9d6c9d5af146ae4d`,
-  also tagged `sha-586033e`), which adds the Gridfinity Socket Tray. The
-  owner force-updated the `1.3.3` container to it and checked the tray in
-  production. The rollback tag is
-  `ghcr.io/marlin1111ai/marlin-cad:sha-9e926bf`. The `1.3.3` tag has been
-  re-pointed by later pushes and no longer resolves to the deployed image.
-  See `reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`.
+- **Since 2026-09-28 the container runs the image built from `0fc0b75`**
+  (`sha256:4a802164bba1562475b631c7afc94daf98d04d7db53c54a433416d5fb569cb54`,
+  also tagged `sha-0fc0b75`) under the `1.3.3` tag. It adds the viewport
+  mouse controls (`bf755c5`). The owner force-updated the `1.3.3` container
+  to it and checked the controls in production: "all good". See
+  `reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`.
+- **The rollback tag is `ghcr.io/marlin1111ai/marlin-cad:sha-586033e`**
+  (`sha256:d1c2c036e0eb6e29dd7d53dbe258b5bf24fa7f721f65c9bb9d6c9d5af146ae4d`),
+  the build the container ran from 2026-09-27 until this update; it added
+  the Gridfinity Socket Tray
+  (`reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`). Until
+  2026-09-28 the rollback tag recorded here was `sha-9e926bf`.
+- **The `1.3.3` tag resolves to the deployed image** (read from the public
+  registry, 2026-09-28). Between 2026-09-27 and this update it did not: it
+  had been re-pointed by later pushes. It now stays put, because the
+  version in `package.json` is `1.3.4` and pushes re-point that tag
+  instead.
+- **`1.3.4` is published but not deployed.** It was built from `c9a4c6d`
+  (`sha256:e3906a1e266949facd9fd88a6db9da48d4f585907722cee2feb2b3a95ad4f9fd`,
+  also tagged `sha-c9a4c6d`). The `1.3.4` tag is re-pointed by every push to
+  `main` since; `sha-c9a4c6d` is not.
 - Unraid backups are run by the owner by hand in Unraid's web terminal; the
   dev box has no route to Unraid (DECISIONS.md).
 - Host port 3001 → container port 3000.
@@ -667,8 +694,11 @@ Since then the process has run unattended: `1.2.0`
 automatically on a push to `main` with no manual dispatch, and `1.3.0`,
 `1.3.1` and `1.3.3` each followed the same three steps. `1.3.2` ran steps 1
 and 2 only — step 3 was deliberately skipped because it would not have
-changed anything on Unraid. `1.3.3` is the tag now deployed; since
-2026-09-27 the container runs the `586033e` build under it (see above).
+changed anything on Unraid. `1.3.4` (`c9a4c6d`, 2026-09-28) also ran steps
+1 and 2 only: it is published and was not deployed, because the owner
+force-updated the `1.3.3` container instead. `1.3.3` is the tag now
+deployed; since 2026-09-28 the container runs the `0fc0b75` build under it
+(see above).
 
 ## Print status
 
