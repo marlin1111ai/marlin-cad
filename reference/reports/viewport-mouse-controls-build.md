@@ -149,7 +149,10 @@ Nothing else used it.
 - Input 13a (the F key) is labelled by the jump back to the home view. The
   view was first moved with a right-drag, which spun before and slides
   now, so the jump back reads as a spin before and a slide after. In both
-  the camera lands on the home view.
+  the camera lands near the home view, (118, 96, 118), not exactly on it:
+  (116.484, 95.127, 120.193) before the change and (117.694, 95.85,
+  118.428) after. The drag before the key press was still easing to a
+  stop. That drift was there before the change.
 - Numbers differ by a few hundredths between two runs of the same drag. The
   camera eases to a stop, and the moves are timed by the clock.
 
