@@ -597,3 +597,26 @@ was so before the change and is so after it.
 
 This restates, as a correction of its own, the builder's note already in the
 Answers section above.
+
+---
+
+## Notes — 2026-09-28
+
+Appended. Nothing above this line was changed. Two statements above said
+something was not checked or not traced; both were checked by the handoff
+audit on 2026-09-28.
+
+- **The tutorial images picture no control.** Section d says that whether
+  any tutorial screenshot pictures a control "was not checked". All 21
+  images under `apps/web/public/assets/challenges/` were looked at: 11 in
+  `key-tag/` and 10 in `nameplate/`, the four dashboard cards among them.
+  Every one is a plain render of the model on the grid. None shows a mouse,
+  a key, a pointer or a written instruction.
+- **Hidden parts reach the near-a-part fallback.** "Least sure" item 5 says
+  that whether hidden parts reach it "was not traced". They do: the editor
+  passes its whole shape list to the viewport, hidden parts included
+  (`viewportShapes`, `apps/web/src/components/SketchForgeEditor.tsx:5984`),
+  and the fallback's loop skips image plates only
+  (`apps/web/src/components/WorkplaneViewport.tsx:3886-3897`). Since
+  `bf755c5` only touch uses the fallback; touch is out of scope and
+  unchanged (answer 12).

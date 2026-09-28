@@ -762,3 +762,12 @@ the numbers of section 9 (open questions) and section 10 (least sure of).
   real part on screen, including a drag started next to a handle and a
   trackpad if he uses one. He replied "bank it".
 - 2. Two-finger touch is not in scope.
+
+### Judgement calls
+
+Added 2026-09-28, after the handoff audit found that judgement call 4
+(section 3) had never been ruled on.
+
+- 4. Accepted by the foreman. A cancelled press is handled like a release,
+  as the code did before the change (pointercancel ran the same reset as
+  pointerup).

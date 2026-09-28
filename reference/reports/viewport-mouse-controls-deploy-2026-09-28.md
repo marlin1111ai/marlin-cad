@@ -80,3 +80,23 @@ index.
   carries this report is a push to `main` at version `1.3.4`, so it
   re-points `1.3.4` to its own build. `sha-c9a4c6d` keeps the digest in the
   Release section.
+
+---
+
+## Answers — 2026-09-28
+
+Appended. Nothing above this line was changed. These closures were made by
+the foreman on 2026-09-28.
+
+- The `1.3.4` tag moving on every push is expected and needs nothing.
+- Rollback after the switch to `1.3.4`: each update names the running build
+  as its rollback before it is applied, read from the owner's pre-update
+  backup check in Unraid's terminal.
+- `KNOWN-FIXES.md`'s version-bump notes stay; they are still correct if a
+  bump is ever made.
+- A force update picks up the latest push to `main` by design. That the
+  image workflow is not gated on CI is already in
+  `reference/OPEN-ITEMS.md`.
+- The Unraid steps are on the owner's word and his pasted terminal output;
+  the running digest he reported matches the registry's `1.3.3` digest;
+  nothing further to test.

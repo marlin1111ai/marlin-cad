@@ -595,17 +595,26 @@ unprinted. Both coupons remain unprinted.
 - Rebuild verified end to end on this box: clone, `npm install`,
   `npm run dev` on port 3000, Wrench Rack Metric 2 preset loads and renders,
   STL export confirmed working.
-- **Docker is deliberately not installed here.** The owner's process is
-  Claude Code publishes to GitHub, the owner pulls on Unraid; Docker runs
-  on Unraid only. The `docker:*` npm scripts do not run on this box.
+- **Docker is installed on this box, and marlin-cad does not use it.**
+  `docker.io` 29.1.3 has been installed since 2026-09-04 (package log), and
+  it runs a container from another project (`marlin-cast-recon`, seen
+  running on 2026-09-28). marlin-cad's images are built by GitHub Actions
+  and the owner updates Unraid; the `docker:*` npm scripts are not run on
+  this box. The owner's process is Claude Code publishes to GitHub, the
+  owner pulls on Unraid. **Corrected 2026-09-28:** until then this line
+  read "Docker is deliberately not installed here" and "Docker runs on
+  Unraid only".
 
 ## Production deployment
 
 - marlin-cad runs as a Docker container on Unraid (`192.168.1.250`), pulled
   from `ghcr.io/marlin1111ai/marlin-cad:1.3.3` (deployed; supersedes
   `1.3.1`, which was pulled by the owner and verified working in the
-  browser). `1.3.2` was never deployed. Docker runs on Unraid only — not on
-  the Linux dev box, and the owner does not want it there.
+  browser). `1.3.2` was never deployed. marlin-cad's container runs on
+  Unraid only — not on the Linux dev box, and the owner does not want it
+  there. **Corrected 2026-09-28:** until then this line read "Docker runs on
+  Unraid only"; Docker is installed on the dev box for another project, and
+  marlin-cad does not use it (Dev environment, above).
 - **Since 2026-09-28 the container runs the image built from `0fc0b75`**
   (`sha256:4a802164bba1562475b631c7afc94daf98d04d7db53c54a433416d5fb569cb54`,
   also tagged `sha-0fc0b75`) under the `1.3.3` tag. It adds the viewport
