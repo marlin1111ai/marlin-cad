@@ -69,6 +69,8 @@ Unraid: "The command finished successfully!".
 
 - Projects still listed: "i have all my stuff".
 - The paste fix: "all good copy paste all the same".
+- **Added 2026-09-29:** the project cards still show their pictures after
+  the update: "thet good".
 
 ## Read from the dev box, 2026-09-29
 

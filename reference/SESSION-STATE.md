@@ -679,10 +679,18 @@ unprinted. Both coupons remain unprinted.
   **but are NOT on the mapped volume.** The container writes
   them to `/app/apps/web/.codex/project-thumbnails` (`process.cwd()` of the
   standalone server plus `.codex/project-thumbnails`, no env var), which is
-  the container's disposable layer — every recreate discards them, and the
-  container has been recreated twice. Local projects themselves are not on
-  Unraid at all: they live in the browser's IndexedDB/localStorage. See
-  OPEN-ITEMS.md and `reference/reports/projects-storage-recon.md`.
+  the container's disposable layer — every recreate discards them. How
+  many times the container has been recreated is not recorded. Local
+  projects themselves are not on Unraid at all: they live in the browser's
+  IndexedDB/localStorage. See OPEN-ITEMS.md and
+  `reference/reports/projects-storage-recon.md`. **Changed 2026-09-29:**
+  until then this bullet said "the container has been recreated twice";
+  that counted the two times it went missing and was rebuilt by hand (the
+  bullet above), not the updates applied on Unraid, and whether `1.2.0`
+  was ever applied there is not recorded. **Note, 2026-09-29:** after the
+  2026-09-29 update, which recreated the container, the owner reported the
+  project cards still show their pictures: "thet good"
+  (`reference/reports/paste-fix-deploy-2026-09-29.md`).
 - Blinking Docker Manager icon fix re-applied on Unraid:
   `cp /mnt/user/appdata/marlin-cad/freecad.png /usr/local/emhttp/plugins/dynamix.docker.manager/images/question.png`
   — RAM-only, lost on reboot.
