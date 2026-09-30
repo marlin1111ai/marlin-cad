@@ -463,13 +463,15 @@ unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
 
-- Paste keeps a shape's own fields (`877951f`, 2026-09-29): a pasted Gridfinity Socket Tray, and every other OpenGrid, Multiconnect and tray shape, had come out bare because paste dropped every field `sceneShape` does not keep; see `reference/KNOWN-FIXES.md`. Not deployed.
+- Paste keeps a shape's own fields (`877951f`, 2026-09-29): a pasted Gridfinity Socket Tray, and every other OpenGrid, Multiconnect and tray shape, had come out bare because paste dropped every field `sceneShape` does not keep; see `reference/KNOWN-FIXES.md`. **Deployed to Unraid 2026-09-29** in the `d80e102` build, at the one-time switch of the container's tag from `1.3.3` to `1.3.4`, and checked by the owner in production: "all good copy paste all the same" (`reference/reports/paste-fix-deploy-2026-09-29.md`). This line read "Not deployed" until then.
 - Viewport mouse controls deployed to Unraid on 2026-09-28: the owner
   force-updated the `1.3.3` container to the `0fc0b75` build and checked
   the controls in production: "all good"
   (`reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`).
 - **Released as `1.3.4`** (`c9a4c6d`, 2026-09-28): built and published, not
-  deployed.
+  deployed. **Note, 2026-09-29:** the container was switched to the `1.3.4`
+  tag on 2026-09-29 and runs the `d80e102` build under it; the `c9a4c6d`
+  build itself was never deployed.
 - Viewport mouse controls changed to follow Bambu Studio's movement
   (`bf755c5`, with `d5c8af0` correcting one line of the build report), and
   passed by the owner on his Mac (`0fc0b75`), all on 2026-09-28. Recon
@@ -491,9 +493,10 @@ unprinted. Both coupons remain unprinted.
   the browser; the mapped `/data/projects` volume is written only by Export →
   SKF → Save to shared.
 - **Released as `1.3.3`, built, pushed and deployed to Unraid (supersedes
-  `1.3.1`).** `9e926bf` makes the project-thumbnail origin guard derive host
-  and port from the `Host` header instead of `request.url`, and bumps the
-  version. Verified live on a standalone production build run the way the
+  `1.3.1`).** **Note, 2026-09-29:** superseded as the deployed tag by
+  `1.3.4` on 2026-09-29 (Production deployment, below). `9e926bf` makes
+  the project-thumbnail origin guard derive host and port from the `Host`
+  header instead of `request.url`, and bumps the version. Verified live on a standalone production build run the way the
   container runs it (`HOSTNAME=0.0.0.0`): POST / GET / DELETE with
   `Host: 192.168.1.250:3001` all returned 200 and the PNG came back
   byte-identical. **Confirmed working on the deployed `1.3.3` container by
@@ -609,36 +612,47 @@ unprinted. Both coupons remain unprinted.
 ## Production deployment
 
 - marlin-cad runs as a Docker container on Unraid (`192.168.1.250`), pulled
-  from `ghcr.io/marlin1111ai/marlin-cad:1.3.3` (deployed; supersedes
-  `1.3.1`, which was pulled by the owner and verified working in the
-  browser). `1.3.2` was never deployed. marlin-cad's container runs on
+  from `ghcr.io/marlin1111ai/marlin-cad:1.3.4` (deployed 2026-09-29;
+  supersedes `1.3.3`, which superseded `1.3.1`, which was pulled by the
+  owner and verified working in the browser). `1.3.2` was never deployed.
+  **Changed 2026-09-29:** until then this line named `1.3.3` as the
+  deployed tag. marlin-cad's container runs on
   Unraid only — not on the Linux dev box, and the owner does not want it
   there. **Corrected 2026-09-28:** until then this line read "Docker runs on
   Unraid only"; Docker is installed on the dev box for another project, and
   marlin-cad does not use it (Dev environment, above).
-- **Since 2026-09-28 the container runs the image built from `0fc0b75`**
-  (`sha256:4a802164bba1562475b631c7afc94daf98d04d7db53c54a433416d5fb569cb54`,
-  also tagged `sha-0fc0b75`) under the `1.3.3` tag. It adds the viewport
-  mouse controls (`bf755c5`). The owner force-updated the `1.3.3` container
-  to it and checked the controls in production: "all good". See
-  `reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`.
-- **The rollback tag is `ghcr.io/marlin1111ai/marlin-cad:sha-586033e`**
-  (`sha256:d1c2c036e0eb6e29dd7d53dbe258b5bf24fa7f721f65c9bb9d6c9d5af146ae4d`),
-  the build the container ran from 2026-09-27 until this update; it added
-  the Gridfinity Socket Tray
-  (`reference/reports/gridfinity-socket-tray-deploy-2026-09-27.md`). Until
-  2026-09-28 the rollback tag recorded here was `sha-9e926bf`.
-- **The `1.3.3` tag resolves to the deployed image** (read from the public
-  registry, 2026-09-28). Between 2026-09-27 and this update it did not: it
-  had been re-pointed by later pushes. It now stays put, because the
-  version in `package.json` is `1.3.4` and pushes re-point that tag
-  instead.
-- **`1.3.4` is published but not deployed.** It was built from `c9a4c6d`
+- **Since 2026-09-29 the container runs the image built from `d80e102`**
+  (`sha256:f7d1836999c4d7ae1fce3e767d1017970463d629163c9ec7f81704f01f6e182b`,
+  also tagged `sha-d80e102`) under the `1.3.4` tag. It adds the paste fix
+  (`877951f`). The owner switched the container's tag from `1.3.3` to
+  `1.3.4` and checked it in production: projects still listed, "i have all
+  my stuff"; the paste fix, "all good copy paste all the same". See
+  `reference/reports/paste-fix-deploy-2026-09-29.md`. **Changed
+  2026-09-29:** until then this line said the container runs the `0fc0b75`
+  build under the `1.3.3` tag, which it did from 2026-09-28
+  (`reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`).
+- **The rollback tag is `ghcr.io/marlin1111ai/marlin-cad:sha-0fc0b75`**
+  (`sha256:4a802164bba1562475b631c7afc94daf98d04d7db53c54a433416d5fb569cb54`),
+  the build the container ran from 2026-09-28 until this update; it added
+  the viewport mouse controls (`bf755c5`). **Changed 2026-09-29:** until
+  then the rollback tag recorded here was `sha-586033e`, and until
+  2026-09-28 it was `sha-9e926bf`.
+- **The `1.3.3` tag resolves to the rollback image, not the deployed one**
+  (read from the public registry, 2026-09-29): `1.3.3` and `sha-0fc0b75`
+  both resolve to the digest above. It stays put, because the version in
+  `package.json` is `1.3.4` and pushes re-point that tag instead.
+  **Changed 2026-09-29:** until then this line read "The `1.3.3` tag
+  resolves to the deployed image".
+- **`1.3.4` is the deployed tag since 2026-09-29.** The one-time switch
+  from `1.3.3` was made on 2026-09-29, and the container is force-updated
+  from then on (Release process, below; DECISIONS.md, 2026-09-28). The
+  `1.3.4` tag is re-pointed by every push to `main`, so it does not stay at
+  the deployed digest; `sha-d80e102` does. `1.3.4` was first built from
+  `c9a4c6d`
   (`sha256:e3906a1e266949facd9fd88a6db9da48d4f585907722cee2feb2b3a95ad4f9fd`,
-  also tagged `sha-c9a4c6d`). The `1.3.4` tag is re-pointed by every push to
-  `main` since; `sha-c9a4c6d` is not. The container's tag is to change from
-  `1.3.3` to `1.3.4` once, at the next update, and be force-updated from
-  then on (Release process, below; DECISIONS.md, 2026-09-28).
+  also tagged `sha-c9a4c6d`). **Changed 2026-09-29:** until then this line
+  read "`1.3.4` is published but not deployed" and said the switch was to
+  be made at the next update.
 - Unraid backups are run by the owner by hand in Unraid's web terminal; the
   dev box has no route to Unraid (DECISIONS.md).
 - Host port 3001 → container port 3000.
@@ -650,15 +664,17 @@ unprinted. Both coupons remain unprinted.
   Actions was enabled on this fork. `1.1.0` was the first image GitHub
   Actions built and published; see the Release process subsection below.
   Those two version numbers are history, not the deployed tag — the
-  container runs `1.3.3`.
+  container runs `1.3.4`. **Changed 2026-09-29:** until then this line
+  read `1.3.3`.
 - The `marlin-cad` container has now gone missing from the Unraid Docker tab
   **twice**, and was recreated by hand from the settings above on both
   occasions: the first time at the `1.1.0` tag, and again on 2026-09-07
   during the `1.3.1` update. The cause is unrecorded on both occasions. The
   projects volume mapping meant no project data was lost either time. Port
   mapping, volume mapping and every other setting are as recorded above; only
-  the image tag has moved forward, to `1.3.1` then, and to `1.3.3` since.
-  See KNOWN-FIXES.md.
+  the image tag has moved forward, to `1.3.1` then, to `1.3.3` after, and
+  to `1.3.4` on 2026-09-29. See KNOWN-FIXES.md. **Changed 2026-09-29:**
+  until then this line ended "and to `1.3.3` since".
 - **Project thumbnails work on `1.3.3`** (owner observation, 2026-09-26)
   **but are NOT on the mapped volume.** The container writes
   them to `/app/apps/web/.codex/project-thumbnails` (`process.cwd()` of the
@@ -686,11 +702,14 @@ Since 2026-09-28 (DECISIONS.md, "Unraid is updated by force update"):
    `main` and `latest`.
 3. The owner force-updates the container on Unraid.
 
-**The one-time switch from `1.3.3` to `1.3.4` is pending at the next
-update.** The container still names the `1.3.3` tag. That tag no longer
-moves, because the version in `package.json` is `1.3.4`, so a force update
-of it picks up nothing new. At the next update the owner changes the
-container's tag to `1.3.4` once; after that he force-updates it.
+**The one-time switch from `1.3.3` to `1.3.4` was made on 2026-09-29.**
+The owner changed the container's Repository from `1.3.3` to `1.3.4` in
+the Unraid Docker tab and applied
+(`reference/reports/paste-fix-deploy-2026-09-29.md`); from now on the owner
+force-updates it. The `1.3.3` tag no longer moves, because the version in
+`package.json` is `1.3.4`, so a force update of it would pick up nothing
+new. **Changed 2026-09-29:** until then this paragraph said the switch was
+pending at the next update and the container still named the `1.3.3` tag.
 
 Until 2026-09-28 the process was three different steps, and the history
 below is written against them: (1) Claude Code bumped the version in the
@@ -723,14 +742,17 @@ steps 1 and 2 only — step 3 was deliberately skipped because it would not
 have changed anything on Unraid. `1.3.4` (`c9a4c6d`, 2026-09-28) also ran
 the earlier steps 1 and 2 only: it is published and was not deployed,
 because the owner force-updated the `1.3.3` container instead. It is the
-last version bump made for a release. `1.3.3` is the tag now deployed;
-since 2026-09-28 the container runs the `0fc0b75` build under it (see
-above).
+last version bump made for a release. `1.3.4` is the tag now deployed;
+since 2026-09-29 the container runs the `d80e102` build under it (see
+above). **Changed 2026-09-29:** until then this sentence named `1.3.3` as
+the tag deployed and the `0fc0b75` build as the one running under it.
 
-The two deploys recorded so far, on 2026-09-27 and 2026-09-28, were both
-force updates of the `1.3.3` container. Each picked up the build that tag
+The two deploys recorded on 2026-09-27 and 2026-09-28 were both force
+updates of the `1.3.3` container. Each picked up the build that tag
 pointed at: `586033e`, then `0fc0b75`, the last push made at version
-`1.3.3`.
+`1.3.3`. **Note, 2026-09-29:** the third deploy, on 2026-09-29, was the
+one-time switch to `1.3.4`, which picked up the `d80e102` build; this
+paragraph began "The two deploys recorded so far" until then.
 
 ## Print status
 
