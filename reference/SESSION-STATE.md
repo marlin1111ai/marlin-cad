@@ -463,6 +463,7 @@ unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Paste keeps a shape's own fields (`877951f`, 2026-09-29): a pasted Gridfinity Socket Tray, and every other OpenGrid, Multiconnect and tray shape, had come out bare because paste dropped every field `sceneShape` does not keep; see `reference/KNOWN-FIXES.md`. Not deployed.
 - Viewport mouse controls deployed to Unraid on 2026-09-28: the owner
   force-updated the `1.3.3` container to the `0fc0b75` build and checked
   the controls in production: "all good"
