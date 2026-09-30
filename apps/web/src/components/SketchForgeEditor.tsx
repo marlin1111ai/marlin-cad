@@ -666,7 +666,9 @@ function parseClipboardShapes(serialized: string) {
       if (typeof name !== "string" || typeof kind !== "string" || typeof color !== "string") {
         return [];
       }
-      return [canonicalizeShape(sceneShape({ ...shape, name, kind, color }))];
+      // sceneShape fills defaults but keeps only the basic fields; spread the
+      // parsed shape back over it so a primitive's own fields survive paste.
+      return [canonicalizeShape({ ...sceneShape({ ...shape, name, kind, color }), ...shape })];
     });
   } catch {
     return [];
