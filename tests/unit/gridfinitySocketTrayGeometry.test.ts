@@ -260,6 +260,37 @@ describe("gridfinity socket tray: closed solid", () => {
     }
   });
 
+  // Any keyboard text since 2026-10-17 (DECISIONS.md). Letters reach outside
+  // the digit band -- capitals above it, the tail of a "g" below -- so each
+  // label's box is widened to its own ink and still starts one gap from
+  // its rim.
+  it("closes with typed words, in both styles, each label's box holding its ink one gap from its rim", () => {
+    const holes: GridfinitySocketTrayHole[] = [
+      { diameter: 14, x: 22, z: 60, label: "Hex Key" },
+      { diameter: 14, x: 62, z: 60, label: "gyp_q" },
+      { diameter: 14, x: 102, z: 60, label: "M8 x1" },
+      { diameter: 14, x: 40, z: 26, label: "#2 (A)" },
+      { diameter: 14, x: 85, z: 26, label: "5.5mm" },
+    ];
+    const layout = gridfinitySocketTrayLayout({ squaresX: 3, squaresZ: 2, holes });
+    const labels = layout.labels;
+    for (const label of labels) {
+      const hole = layout.holes[label.hole];
+      const outline = labelOutline(label.text);
+      expect(label.minZ - (hole.z + hole.radius), label.text).toBeCloseTo(GRIDFINITY_SOCKET_TRAY_GAP, 9);
+      expect(label.baselineZ - outline.maxY, label.text).toBeGreaterThanOrEqual(label.minZ - 1e-9);
+      expect(label.baselineZ - outline.minY, label.text).toBeLessThanOrEqual(label.maxZ + 1e-9);
+    }
+    const tail = labels.find((label) => label.text === "gyp_q")!;
+    expect(tail.maxZ - tail.baselineZ).toBeGreaterThan(1.4);
+    for (const labelStyle of STYLES) {
+      const positions = gridfinitySocketTrayPositions({ squaresX: 3, squaresZ: 2, holes, labelStyle });
+      expect(directedEdgeDefects(positions)).toEqual([]);
+      const analysis = analyzeTriangleSoup(positions);
+      expect([analysis.boundaryEdges, analysis.nonManifoldEdges]).toEqual([0, 0]);
+    }
+  });
+
   it("builds a float32 geometry with the same triangle count", () => {
     const positions = gridfinitySocketTrayPositions(defaultTray());
     const geometry = createGridfinitySocketTrayGeometry(defaultTray());
@@ -532,6 +563,12 @@ describe("gridfinity socket tray: labels", () => {
     }
   });
 
+  it("a label of only spaces counts as blank", () => {
+    const spaces = gridfinitySocketTrayPositions(defaultTray({ holes: DEFAULT_HOLES.map((hole) => ({ ...hole, label: "   " })) }));
+    const blank = gridfinitySocketTrayPositions(defaultTray({ holes: DEFAULT_HOLES.map((hole) => ({ ...hole, label: "" })) }));
+    expect(spaces).toEqual(blank);
+  });
+
   it("a hole with blank label text gets no label", () => {
     const labelled = gridfinitySocketTrayPositions(defaultTray());
     const blank = gridfinitySocketTrayPositions(defaultTray({ holes: DEFAULT_HOLES.map((hole) => ({ ...hole, label: "" })) }));
@@ -646,9 +683,11 @@ describe("gridfinity socket tray: guards", () => {
     expect(tray([pair[0], { ...pair[1], x: 49 }], { cornerRadius: 1 })).not.toThrow();
   });
 
-  it("label text: only 0123456789m-/", () => {
-    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5 mm" }])).toThrow(/label 0: "5 mm" contains " "; only the characters 0123456789m-\/ are supported/);
-    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5.5" }])).toThrow(/label 0: "5.5" contains "\."/);
+  it("label text: any keyboard character", () => {
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5é" }])).toThrow(/label 0: "5é" contains "é"; only keyboard characters \(letters, digits, punctuation and spaces\) are supported/);
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5 mm" }])).not.toThrow();
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5.5" }])).not.toThrow();
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "Hex" }])).not.toThrow();
     expect(tray([{ diameter: 14, x: 60, z: 40, label: "3/8" }])).not.toThrow();
     expect(tray([{ diameter: 14, x: 60, z: 40, label: "1-1/16" }])).not.toThrow();
     expect(tray([{ diameter: 14, x: 60, z: 40, label: "16mm" }])).not.toThrow();

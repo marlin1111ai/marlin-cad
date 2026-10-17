@@ -1267,8 +1267,10 @@ function GridfinitySocketTrayHoleCard({
   // first label appears or the last one goes.
   const setHoles = (next: NonNullable<WorkplaneShape["gridfinityTrayHoles"]>) =>
     onUpdate({ gridfinityTrayHoles: next, height: gridfinitySocketTrayShapeSize({ ...shape, gridfinityTrayHoles: next }).height });
-  // Only the characters the printed label test piece vetted can be typed.
-  const labelText = (value: string) => Array.from(value.toLowerCase()).filter((character) => LABEL_CHARACTERS.includes(character)).join("");
+  // Labels take what is typed, as typed. Only characters off the keyboard
+  // (emoji, accented letters) are dropped -- the label geometry cannot
+  // build every one of them.
+  const labelText = (value: string) => Array.from(value).filter((character) => LABEL_CHARACTERS.includes(character)).join("");
   return (
     <div className={`property-card ${open ? "" : "collapsed"}`}>
       <button

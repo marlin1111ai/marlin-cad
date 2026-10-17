@@ -28,7 +28,9 @@ import helvetikerBoldFontJson from "three/examples/fonts/helvetiker_bold.typefac
 // exact-stitch contract is met by REUSING the sampled arrays, never by
 // recomputing them. Font glyphs are not CAD contours, so only the
 // characters in LABEL_CHARACTERS are accepted -- each one is pinned by the
-// exact directed-edge test in tests/unit/labelSlabGeometry.test.ts.
+// exact directed-edge test in tests/unit/labelSlabGeometry.test.ts. Some of
+// the font's other glyphs (the ring of a copyright sign, several Greek
+// letters) do NOT build closed, which is why the set stops at the keyboard.
 //
 // World frame: the slab lies flat on the bed like the flat Socket Tray, so
 // there is no as-mounted-view mirror. X = width [0, width], Y = thickness
@@ -48,10 +50,12 @@ import helvetikerBoldFontJson from "three/examples/fonts/helvetiker_bold.typefac
 export const LABEL_DIGIT_HEIGHT = 5;
 // Raised height above / recessed depth below the top face.
 export const LABEL_DEPTH = 0.8;
-// The only characters a label may contain (see file header). "-" and "/"
-// were added 2026-10-17 for fractional sizes like "3/16"; "/" is this
-// module's own bold slash, not the font's (see BOLD_SLASH_OUTLINE).
-export const LABEL_CHARACTERS = "0123456789m-/";
+// The only characters a label may contain (see file header): every
+// character on a keyboard -- printable ASCII, space through "~". The owner
+// asked for any typed text (DECISIONS.md, 2026-10-17); before that only
+// 0123456789m and then "-" and "/" were accepted. "/" is this module's own
+// bold slash, not the font's (see BOLD_SLASH_OUTLINE).
+export const LABEL_CHARACTERS = Array.from({ length: 95 }, (_, index) => String.fromCharCode(32 + index)).join("");
 // Points sampled per quadratic curve of a glyph outline.
 export const LABEL_CURVE_DIVISIONS = 8;
 // Minimum material kept under a recessed label's floor -- this module's own
@@ -84,8 +88,9 @@ export type LabelSlabOptions = {
 type Point2 = readonly [number, number];
 type Point3 = readonly [number, number, number];
 
-// One closed outline with the enclosed counters cut out of it. A glyph of
-// the accepted character set is exactly one part.
+// One closed outline with the enclosed counters cut out of it. Most
+// characters are one part; some are several (the dot of an "i", the two
+// bars of an "=").
 export type LabelGlyphOutline = {
   outer: Point2[];
   holes: Point2[][];
@@ -189,7 +194,9 @@ const DIGIT_EXTENT_UNITS = verticalExtent(fontUnitOutlines("0123456789"));
 export const LABEL_SCALE = LABEL_DIGIT_HEIGHT / (DIGIT_EXTENT_UNITS.max - DIGIT_EXTENT_UNITS.min);
 // Every label's digits sit inside this band, measured up from the baseline:
 // LABEL_BAND_TOP - LABEL_BAND_BOTTOM is LABEL_DIGIT_HEIGHT. The bottom is
-// slightly negative -- round digits overshoot the baseline.
+// slightly negative -- round digits overshoot the baseline. Other
+// characters can reach outside it (the tail of a "g", the top of an "A"),
+// so layouts make room with labelBand.
 export const LABEL_BAND_BOTTOM = DIGIT_EXTENT_UNITS.min * LABEL_SCALE;
 export const LABEL_BAND_TOP = DIGIT_EXTENT_UNITS.max * LABEL_SCALE;
 
@@ -197,9 +204,10 @@ function validateLabelText(text: string, where: string) {
   if (typeof text !== "string" || text.length === 0) throw new Error(`${where}: label text must not be empty`);
   for (const character of text) {
     if (!LABEL_CHARACTERS.includes(character)) {
-      throw new Error(`${where}: label "${text}" contains "${character}"; only the characters ${LABEL_CHARACTERS} are supported`);
+      throw new Error(`${where}: label "${text}" contains "${character}"; only keyboard characters (letters, digits, punctuation and spaces) are supported`);
     }
   }
+  if (text.trim().length === 0) throw new Error(`${where}: label text must not be only spaces`);
 }
 
 export function labelOutline(text: string): LabelOutline {
@@ -219,6 +227,13 @@ export function labelOutline(text: string): LabelOutline {
     }
   }
   return { text, glyphs, minX, maxX, minY, maxY };
+}
+
+// The band a label needs, measured up from its baseline: the digit band,
+// widened to the label's own ink where that reaches outside it. A label of
+// digits gets exactly the digit band.
+export function labelBand(outline: LabelOutline): { top: number; bottom: number } {
+  return { top: Math.max(LABEL_BAND_TOP, outline.maxY), bottom: Math.min(LABEL_BAND_BOTTOM, outline.minY) };
 }
 
 export function normalizeLabelSlabThickness(value?: number): number {
@@ -268,8 +283,10 @@ export type LabelSlabLayout = {
 };
 
 // The slab is sized FROM its labels -- just big enough to hold them. Each
-// column is as wide as its widest label, every row is LABEL_DIGIT_HEIGHT
-// tall, `gap` separates neighbours and `margin` surrounds the lot. Labels
+// column is as wide as its widest label, a row is LABEL_DIGIT_HEIGHT tall
+// unless one of its labels reaches outside the digit band (then it is as
+// tall as its labels' combined band), `gap` separates neighbours and
+// `margin` surrounds the lot. Labels
 // are left-aligned in their column by their ink, not by their pen origin.
 export function labelSlabLayout(options: LabelSlabOptions): LabelSlabLayout {
   const thickness = normalizeLabelSlabThickness(options.thickness);
@@ -307,8 +324,19 @@ export function labelSlabLayout(options: LabelSlabOptions): LabelSlabLayout {
     columnLeft.push(column === 0 ? margin : columnLeft[column - 1] + columnWidth[column - 1] + gap);
   }
   const width = columnLeft[columnCount - 1] + columnWidth[columnCount - 1] + margin;
-  const rowTop = rows.map((_, row) => margin + row * (LABEL_DIGIT_HEIGHT + gap));
-  const depth = rowTop[rows.length - 1] + LABEL_DIGIT_HEIGHT + margin;
+  // A row of digit-band labels keeps LABEL_DIGIT_HEIGHT itself (not
+  // LABEL_BAND_TOP - LABEL_BAND_BOTTOM), so the printed test pieces are
+  // unchanged to the last bit.
+  const rowBand = outlines.map((row) => {
+    const bands = row.map(labelBand);
+    const top = Math.max(...bands.map((band) => band.top));
+    const bottom = Math.min(...bands.map((band) => band.bottom));
+    const height = top === LABEL_BAND_TOP && bottom === LABEL_BAND_BOTTOM ? LABEL_DIGIT_HEIGHT : top - bottom;
+    return { top, height };
+  });
+  const rowTop: number[] = [];
+  rowBand.forEach((band, row) => rowTop.push(row === 0 ? margin : rowTop[row - 1] + rowBand[row - 1].height + gap));
+  const depth = rowTop[rows.length - 1] + rowBand[rows.length - 1].height + margin;
 
   // Cell boundaries: the slab's own edges outside, the middle of each gap
   // inside. Built ONCE -- neighbouring cells read the same doubles.
@@ -320,7 +348,7 @@ export function labelSlabLayout(options: LabelSlabOptions): LabelSlabLayout {
     row.forEach((cell, columnIndex) => {
       const outline = outlines[rowIndex][columnIndex];
       const originX = columnLeft[columnIndex] - outline.minX;
-      const baselineZ = rowTop[rowIndex] + LABEL_BAND_TOP;
+      const baselineZ = rowTop[rowIndex] + rowBand[rowIndex].top;
       const place = (loop: Point2[]): Point2[] => loop.map(([x, y]) => [originX + x, baselineZ - y] as const);
       labels.push({
         text: cell.text,

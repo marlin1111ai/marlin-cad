@@ -319,11 +319,12 @@ built on labels.
   Boundary-rep only, no CSG. Not registered in the editor.
 - Font: Helvetiker bold, from three's bundled typeface fonts. One uniform
   scale makes the digit set 0–9 exactly 5.00mm tall; individual digits
-  measure 4.69mm to 4.99mm. Only the characters `0123456789m-/` are accepted;
-  "-" and "/" were added 2026-10-17, and "/" is the module's own bold slash
-  (DECISIONS.md).
-- Tests: `tests/unit/labelSlabGeometry.test.ts` — 61 tests (49 until the
-  2026-10-17 slash/dash change), including the
+  measure 4.69mm to 4.99mm. Every keyboard character is accepted (printable
+  ASCII, space through "~", since 2026-10-17; `0123456789m-/` before that);
+  "/" is the module's own bold slash (DECISIONS.md). Letters that reach
+  outside the digit band widen the label's box (`labelBand`).
+- Tests: `tests/unit/labelSlabGeometry.test.ts` — 66 tests (49 until the
+  2026-10-17 slash/dash change, 61 until any keyboard text), including the
   exact directed-edge test on every label in both styles and a byte-for-byte
   match between the committed STL and the module. The raycast test was sped
   up in `6f8813f` after it timed out in CI on `742dcb1` and `e40575f`.
@@ -373,8 +374,9 @@ trays are unchanged by this work.
 - Holes: owner-typed diameter, X from the left edge and Z from the edge
   nearest the viewer, which is geometry Z = depth; Z is turned into geometry
   space at one marked spot (`normalizedHoles`). No auto-layout.
-- Labels: text typed per hole (`0123456789m-/` only, blank for none;
-  "-" and "/" since 2026-10-17, test piece unprinted),
+- Labels: text typed per hole, any keyboard character as typed (capitals,
+  spaces, punctuation; since 2026-10-17, blank or only spaces for none;
+  before that `0123456789m-/` only),
   Helvetiker bold, centred on the hole, 3mm in front of its rim. One
   raised / recessed setting for the whole tray, default raised.
 - Corner Radius: owner-typed, on every hole's top edge and the top
@@ -470,6 +472,12 @@ built, deployed and printed by the owner while both coupons were still
 unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
+
+- Labels take any keyboard text (2026-10-17): whatever is typed in a
+  Gridfinity Socket Tray hole's label box is the label, capitals and spaces
+  kept. Only characters off the keyboard (emoji, accents) are dropped.
+  Every keyboard character is tested closed, raised and recessed; no label
+  with letters has been printed. Not deployed.
 
 - Labels accept "-" and "/" (`5132034`, 2026-10-17): inch sizes such as
   "3/16" can be typed on the Gridfinity Socket Tray; "/" is the label
@@ -809,9 +817,10 @@ paragraph began "The two deploys recorded so far" until then.
 
 ## Test suite
 
-2026-10-17, after the slash/dash label change: 752 unit tests passing
-across 58 files; `tests/unit/labelSlabGeometry.test.ts` has 61 and
-`tests/unit/gridfinitySocketTrayGeometry.test.ts` 65. The paragraph below
+2026-10-17, after labels took any keyboard text: 759 unit tests passing
+across 58 files; `tests/unit/labelSlabGeometry.test.ts` has 66 and
+`tests/unit/gridfinitySocketTrayGeometry.test.ts` 67. After the slash/dash
+change earlier that day the counts were 752, 61 and 65. The paragraph below
 is the 2026-09-27 count.
 
 739 unit tests passing across 58 files (`npm test`, re-run 2026-09-27 on

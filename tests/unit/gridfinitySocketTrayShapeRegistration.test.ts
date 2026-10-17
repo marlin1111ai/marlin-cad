@@ -545,7 +545,8 @@ describe("gridfinity socket tray registration", () => {
     expect(error({ gridfinityTrayHoles: [{ diameter: 14, x: 12, z: 40, label: "10mm" }] })).toMatch(/Hole 1's label "10mm" is too close to the tray edge/);
     expect(error({ gridfinityTrayHoles: [{ diameter: 14, x: 40, z: 40, label: "10mm" }, { diameter: 14, x: 57, z: 40, label: "11mm" }] })).toMatch(/The labels of Holes 1 and 2 \("10mm" and "11mm"\) are too close together/);
     expect(error({ gridfinityTrayHoles: [{ diameter: 14, x: 60, z: 60, label: "5mm" }, { diameter: 14, x: 60, z: 43, label: "" }] })).toMatch(/Hole 1's label "5mm" is too close to Hole 2/);
-    expect(error({ gridfinityTrayHoles: [{ ...holes[0], label: "5.5" }] })).toMatch(/Hole 1's label can only use the characters 0123456789m-\/\./);
+    expect(error({ gridfinityTrayHoles: [{ ...holes[0], label: "5é" }] })).toMatch(/Hole 1's label can only use keyboard characters \(letters, digits, punctuation and spaces\)\./);
+    expect(error({ gridfinityTrayHoles: [{ ...holes[0], label: "5.5" }] })).toBeNull();
     expect(error({ gridfinityTrayHoles: [{ ...holes[0], label: "3/8" }] })).toBeNull();
     expect(error({ gridfinityTrayCornerRadius: 4 })).toMatch(/Corner Radius must be less than 3.75mm/);
     expect(error({ gridfinityTrayCornerRadius: 1, gridfinityTrayHoles: [{ diameter: 14, x: 11, z: 40, label: "" }] })).toMatch(/Corner Radius widens Hole 1 to within 4mm of the tray edge/);

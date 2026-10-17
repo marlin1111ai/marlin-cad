@@ -6,10 +6,9 @@ import {
   gridfinityFootPositions,
 } from "@/lib/gridfinityFootGeometry";
 import {
-  LABEL_BAND_BOTTOM,
-  LABEL_BAND_TOP,
   LABEL_CHARACTERS,
   LABEL_DEPTH,
+  labelBand,
   labelOutline,
   type LabelGlyphOutline,
   type LabelStyle,
@@ -144,7 +143,8 @@ export function normalizeGridfinitySocketTrayLabelStyle(value?: LabelStyle): Lab
 }
 
 function hasLabel(hole: GridfinitySocketTrayHole): boolean {
-  return typeof hole.label === "string" && hole.label.length > 0;
+  // A label of only spaces has nothing to print, so it counts as blank.
+  return typeof hole.label === "string" && hole.label.trim().length > 0;
 }
 
 export type GridfinitySocketTrayDimensions = {
@@ -289,15 +289,18 @@ function placedLabels(holes: GridfinitySocketTrayHole[], placedHoles: Gridfinity
     const text = hole.label as string;
     for (const character of text) {
       if (!LABEL_CHARACTERS.includes(character)) {
-        throw new Error(`gridfinity socket tray label ${index}: "${text}" contains "${character}"; only the characters ${LABEL_CHARACTERS} are supported`);
+        throw new Error(`gridfinity socket tray label ${index}: "${text}" contains "${character}"; only keyboard characters (letters, digits, punctuation and spaces) are supported`);
       }
     }
     const outline = labelOutline(text);
     const placedHole = placedHoles[index];
     const originX = placedHole.x - (outline.minX + outline.maxX) / 2;
-    // The top of the digit band (as read) sits one gap in front of the rim.
+    // The top of the label's band (as read) sits one gap in front of the
+    // rim. For a label of digits that is the digit band; letters that reach
+    // above or below it (an "A", the tail of a "g") widen it.
+    const band = labelBand(outline);
     const bandTopZ = placedHole.z + placedHole.rimRadius + gap;
-    const baselineZ = bandTopZ + LABEL_BAND_TOP;
+    const baselineZ = bandTopZ + band.top;
     const place = (loop: readonly (readonly [number, number])[]): Point2[] => loop.map(([x, y]) => [originX + x, baselineZ - y] as const);
     labels.push({
       hole: index,
@@ -305,7 +308,7 @@ function placedLabels(holes: GridfinitySocketTrayHole[], placedHoles: Gridfinity
       minX: originX + outline.minX,
       maxX: originX + outline.maxX,
       minZ: bandTopZ,
-      maxZ: baselineZ - LABEL_BAND_BOTTOM,
+      maxZ: baselineZ - band.bottom,
       baselineZ,
       glyphs: outline.glyphs.map((glyph) => ({ outer: place(glyph.outer), holes: glyph.holes.map(place) })),
     });

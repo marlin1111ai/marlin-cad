@@ -445,8 +445,8 @@ export function gridfinitySocketTrayLayoutError(shape: WorkplaneShape): string |
     if (holeEdge) return `Hole ${Number(holeEdge[1]) + 1} is too close to the tray edge (${edge}mm clearance is required).`;
     const invalid = message.match(/hole (\d+): diameter/);
     if (invalid) return `Hole ${Number(invalid[1]) + 1} has invalid values.`;
-    const characters = message.match(/label (\d+): .* only the characters (\S+) are supported/);
-    if (characters) return `Hole ${Number(characters[1]) + 1}'s label can only use the characters ${characters[2]}.`;
+    const characters = message.match(/label (\d+): .* only keyboard characters/);
+    if (characters) return `Hole ${Number(characters[1]) + 1}'s label can only use keyboard characters (letters, digits, punctuation and spaces).`;
     const labelEdge = message.match(/label (\d+) \("([^"]*)"\) is within .* tray edge/);
     if (labelEdge) return `Hole ${Number(labelEdge[1]) + 1}'s label "${labelEdge[2]}" is too close to the tray edge (${edge}mm clearance is required) — move the hole or shorten the label.`;
     const labelHole = message.match(/label (\d+) \("([^"]*)"\) is within .* of hole (\d+)/);
