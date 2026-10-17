@@ -476,8 +476,10 @@ unprinted. Both coupons remain unprinted.
 - Labels take any keyboard text (`4648fe0`, 2026-10-17): whatever is typed in a
   Gridfinity Socket Tray hole's label box is the label, capitals and spaces
   kept. Only characters off the keyboard (emoji, accents) are dropped.
-  Every keyboard character is tested closed, raised and recessed; no label
-  with letters has been printed. **Deployed to Unraid 2026-10-17**: "docker
+  Every keyboard character is tested closed, raised and recessed. **Printed
+  2026-10-17 and fine**: the owner printed labels with letters and reported
+  "they fine" (which labels and which style was not recorded). Until then
+  this line read "no label with letters has been printed". **Deployed to Unraid 2026-10-17**: "docker
   updated and working" (`reference/reports/label-any-text-deploy-2026-10-17.md`).
   This line read "Not deployed" until then.
 
