@@ -471,6 +471,12 @@ unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
 
+- Labels accept "-" and "/" (`5132034`, 2026-10-17): inch sizes such as
+  "3/16" can be typed on the Gridfinity Socket Tray; "/" is the label
+  module's own bold slash (DECISIONS.md). Checked by the owner in the dev
+  app and **deployed to Unraid 2026-10-17**: "all good works"
+  (`reference/reports/label-slash-dash-deploy-2026-10-17.md`). The fraction
+  label test piece is unprinted.
 - Paste keeps a shape's own fields (`877951f`, 2026-09-29): a pasted Gridfinity Socket Tray, and every other OpenGrid, Multiconnect and tray shape, had come out bare because paste dropped every field `sceneShape` does not keep; see `reference/KNOWN-FIXES.md`. **Deployed to Unraid 2026-09-29** in the `d80e102` build, at the one-time switch of the container's tag from `1.3.3` to `1.3.4`, and checked by the owner in production: "all good copy paste all the same" (`reference/reports/paste-fix-deploy-2026-09-29.md`). This line read "Not deployed" until then.
 - Viewport mouse controls deployed to Unraid on 2026-09-28: the owner
   force-updated the `1.3.3` container to the `0fc0b75` build and checked
@@ -629,7 +635,13 @@ unprinted. Both coupons remain unprinted.
   there. **Corrected 2026-09-28:** until then this line read "Docker runs on
   Unraid only"; Docker is installed on the dev box for another project, and
   marlin-cad does not use it (Dev environment, above).
-- **Since 2026-09-29 the container runs the image built from `d80e102`**
+- **Since 2026-10-17 the container runs the image built from `5132034`**
+  (`sha256:792f027b17a28e9b9a4ed66fe6e4a07fe4d7f1ea1483fd301d2af13f29bb791c`,
+  also tagged `sha-5132034`) under the `1.3.4` tag. It adds "-" and "/" to
+  label text. The owner force-updated and reported "all good works"; see
+  `reference/reports/label-slash-dash-deploy-2026-10-17.md`. The rollback
+  tag is now `sha-d80e102`, the build named in the next bullet.
+- **From 2026-09-29 to 2026-10-17 the container ran the image built from `d80e102`**
   (`sha256:f7d1836999c4d7ae1fce3e767d1017970463d629163c9ec7f81704f01f6e182b`,
   also tagged `sha-d80e102`) under the `1.3.4` tag. It adds the paste fix
   (`877951f`). The owner switched the container's tag from `1.3.3` to
@@ -639,7 +651,7 @@ unprinted. Both coupons remain unprinted.
   2026-09-29:** until then this line said the container runs the `0fc0b75`
   build under the `1.3.3` tag, which it did from 2026-09-28
   (`reference/reports/viewport-mouse-controls-deploy-2026-09-28.md`).
-- **The rollback tag is `ghcr.io/marlin1111ai/marlin-cad:sha-0fc0b75`**
+- **Until 2026-10-17 the rollback tag was `ghcr.io/marlin1111ai/marlin-cad:sha-0fc0b75`**
   (`sha256:4a802164bba1562475b631c7afc94daf98d04d7db53c54a433416d5fb569cb54`),
   the build the container ran from 2026-09-28 until this update; it added
   the viewport mouse controls (`bf755c5`). **Changed 2026-09-29:** until
