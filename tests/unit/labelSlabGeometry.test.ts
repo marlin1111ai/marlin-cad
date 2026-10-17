@@ -11,7 +11,9 @@ import {
   LABEL_CHARACTERS,
   LABEL_DEPTH,
   LABEL_DIGIT_HEIGHT,
+  LABEL_FRACTION_TEST_PIECE_LABELS,
   LABEL_TEST_PIECE_SOCKET_SIZES,
+  labelFractionTestPieceOptions,
   labelOutline,
   labelSlabLayout,
   labelSlabPositions,
@@ -28,11 +30,20 @@ import { analyzeTriangleSoup } from "@/lib/svgImport";
 // one copy of the layout, not two to keep in sync.
 const TEST_PIECE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../test-prints/label-test-piece.stl");
 const TEST_PIECE_OPTIONS = labelTestPieceOptions();
+// The fraction label test piece, from scripts/generate-label-fraction-test-piece.mjs.
+const FRACTION_TEST_PIECE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../test-prints/label-fraction-test-piece.stl");
+const FRACTION_TEST_PIECE_OPTIONS = labelFractionTestPieceOptions();
 
 // The owner's socket set, typed out by hand here rather than read back from
 // the module, so a change to the module's list cannot pass unnoticed.
 const SOCKET_LABELS = ["5mm", "6mm", "7mm", "8mm", "9mm", "10mm", "11mm", "12mm", "13mm", "14mm", "15mm", "16mm"];
 const STYLES: LabelStyle[] = ["raised", "recessed"];
+// Inch socket sizes, typed out by hand for the same reason: every common
+// size from 5/32 to 1-1/4, plus the fraction test piece's six.
+const FRACTION_LABELS = [
+  "5/32", "3/16", "7/32", "1/4", "9/32", "5/16", "11/32", "3/8", "7/16", "1/2", "9/16",
+  "5/8", "11/16", "3/4", "13/16", "7/8", "15/16", "1-1/16", "1-1/8", "1-1/4",
+];
 
 type Point2 = readonly [number, number];
 
@@ -225,9 +236,57 @@ describe("label outlines", () => {
     }
   });
 
+  // The font's own slash is a 0.45mm stroke reaching outside the digit band;
+  // the module draws its own (DECISIONS.md, 2026-10-17).
+  it("the slash is as bold as the 1's stem and stays inside the digit band", () => {
+    const slash = labelOutline("/");
+    const one = labelOutline("1");
+    expect(slash.minY).toBe(0);
+    expect(slash.maxY).toBe(one.maxY);
+    expect(slash.maxY).toBeLessThanOrEqual(LABEL_BAND_TOP);
+    const outer = slash.glyphs[0].outer;
+    expect(outer.length).toBe(4);
+    // Horizontal stroke width, then measured square to the slant.
+    const bottom = outer.filter(([, y]) => y === 0).map(([x]) => x);
+    const top = outer.filter(([, y]) => y === slash.maxY).map(([x]) => x);
+    const across = Math.max(...bottom) - Math.min(...bottom);
+    expect(Math.max(...top) - Math.min(...top)).toBeCloseTo(across, 12);
+    const slope = (Math.min(...top) - Math.min(...bottom)) / slash.maxY;
+    const stroke = across / Math.hypot(1, slope);
+    // The 1's stem: 194 font units, the same number the slash is drawn at.
+    const oneStem = one.maxX - Math.min(...one.glyphs[0].outer.filter(([, y]) => y === 0).map(([x]) => x));
+    expect(stroke).toBeCloseTo(oneStem, 2);
+    expect(stroke).toBeGreaterThan(0.94);
+  });
+
+  it("the dash sits inside the digit band", () => {
+    const dash = labelOutline("-");
+    expect(dash.minY).toBeGreaterThan(0);
+    expect(dash.maxY).toBeLessThan(LABEL_BAND_TOP);
+    expect(dash.maxY - dash.minY).toBeGreaterThan(0.9);
+  });
+
+  // Slicer slit fusion (CLAUDE-LESSONS.md): the slash and dash must not
+  // bring a glyph closer to its neighbour than the narrowest gap the
+  // printed metric test piece already passed with (0.24mm, "10mm").
+  it("in every inch size, the slash and dash keep more than 1mm from their neighbours", () => {
+    for (const text of FRACTION_LABELS) {
+      const glyphs = labelOutline(text).glyphs;
+      expect(glyphs.length, text).toBe(text.length);
+      for (let i = 0; i + 1 < glyphs.length; i += 1) {
+        if (!"/-".includes(text[i]) && !"/-".includes(text[i + 1])) continue;
+        let gap = Number.POSITIVE_INFINITY;
+        for (const [x, y] of glyphs[i].outer) gap = Math.min(gap, distanceToLoop(glyphs[i + 1].outer, x, y));
+        for (const [x, y] of glyphs[i + 1].outer) gap = Math.min(gap, distanceToLoop(glyphs[i].outer, x, y));
+        expect(gap, `"${text}" between "${text[i]}" and "${text[i + 1]}"`).toBeGreaterThan(1);
+      }
+    }
+  });
+
   it("rejects characters outside the accepted set, and empty text", () => {
-    expect(() => labelOutline("5 mm")).toThrow(/only the characters 0123456789m are supported/);
+    expect(() => labelOutline("5 mm")).toThrow(/only the characters 0123456789m-\/ are supported/);
     expect(() => labelOutline("5MM")).toThrow(/contains "M"/);
+    expect(() => labelOutline("5.5")).toThrow(/contains "\."/);
     expect(() => labelOutline("")).toThrow(/must not be empty/);
   });
 });
@@ -245,6 +304,19 @@ describe("labelSlabPositions: every socket label, one at a time", () => {
         expect(directedEdgeDefects(positions)).toEqual([]);
       });
     }
+  }
+
+  for (const style of STYLES) {
+    it(`every inch size ${style}: watertight, manifold, exact directed-edge manifold`, () => {
+      for (const text of FRACTION_LABELS) {
+        const positions = labelSlabPositions({ rows: [[{ text, style }]] });
+        const analysis = analyzeTriangleSoup(positions);
+        expect(analysis.boundaryEdges, text).toBe(0);
+        expect(analysis.nonManifoldEdges, text).toBe(0);
+        expect(analysis.degenerateTriangles, text).toBe(0);
+        expect(directedEdgeDefects(positions), text).toEqual([]);
+      }
+    });
   }
 
   // The glyphs of a label share one baseline, so earcut runs triangle edges
@@ -377,125 +449,175 @@ describe("labelSlabPositions: label test piece", () => {
 // over a raised stroke, 2.2mm over a recessed stroke, and 3mm everywhere
 // else -- between glyphs, between labels, and inside every counter -- with
 // solid material all the way down to the bed beneath it.
-describe("test-prints/label-test-piece.stl", () => {
-  const file = readFileSync(TEST_PIECE_PATH, "utf8");
-  const filePositions = parseStlToScenePositions(file);
-  const layout = labelSlabLayout(TEST_PIECE_OPTIONS);
+type TestPieceFileExpectations = {
+  triangles: number;
+  minStrokeSamples: number;
+  minCounterSamples: number;
+  minFlatSamples: number;
+};
 
-  it("is exactly what the module produces, byte for byte", () => {
-    const expected = toStlText(labelSlabPositions(TEST_PIECE_OPTIONS));
-    expect(file.length).toBe(expected.length);
-    expect(file === expected).toBe(true);
-    expect(file.split("\n").filter((line) => line.startsWith("  facet normal")).length).toBe(40864);
+function describeTestPieceFile(filePath: string, options: LabelSlabOptions, expected: TestPieceFileExpectations) {
+  describe(`test-prints/${path.basename(filePath)}`, () => {
+    const file = readFileSync(filePath, "utf8");
+    const filePositions = parseStlToScenePositions(file);
+    const layout = labelSlabLayout(options);
+
+    it("is exactly what the module produces, byte for byte", () => {
+      const text = toStlText(labelSlabPositions(options));
+      expect(file.length).toBe(text.length);
+      expect(file === text).toBe(true);
+      expect(file.split("\n").filter((line) => line.startsWith("  facet normal")).length).toBe(expected.triangles);
+    });
+
+    it("the file itself is watertight, manifold and exact directed-edge manifold", () => {
+      const analysis = analyzeTriangleSoup(filePositions);
+      expect(analysis.triangleCount).toBe(expected.triangles);
+      expect(analysis.boundaryEdges).toBe(0);
+      expect(analysis.nonManifoldEdges).toBe(0);
+      expect(analysis.degenerateTriangles).toBe(0);
+      expect(directedEdgeDefects(filePositions)).toEqual([]);
+    });
+
+    it("raised where raised, recessed where recessed, flat everywhere else, solid underneath", () => {
+      const STEP = 0.21;
+      const KEEP_OFF_OUTLINE = 0.02;
+      let strokeSamples = 0;
+      let counterSamples = 0;
+      let flatSamples = 0;
+
+      // The file's triangles are filtered ONCE, not once per label: one pass
+      // drops the vertical ones (walls -- a vertical ray never crosses them)
+      // and hands each of the rest to every cell its plan bounding box
+      // touches, in file order.
+      const cellTriangles: number[][][] = layout.labels.map(() => []);
+      for (let i = 0; i + 8 < filePositions.length; i += 9) {
+        const p = filePositions;
+        const denom = (p[i + 5] - p[i + 8]) * (p[i] - p[i + 6]) + (p[i + 6] - p[i + 3]) * (p[i + 2] - p[i + 8]);
+        if (Math.abs(denom) < 1e-12) continue;
+        const minX = Math.min(p[i], p[i + 3], p[i + 6]);
+        const maxX = Math.max(p[i], p[i + 3], p[i + 6]);
+        const minZ = Math.min(p[i + 2], p[i + 5], p[i + 8]);
+        const maxZ = Math.max(p[i + 2], p[i + 5], p[i + 8]);
+        let triangle: number[] | null = null;
+        layout.labels.forEach((label, index) => {
+          if (maxX < label.cellMinX || minX > label.cellMaxX) return;
+          if (maxZ < label.cellMinZ || minZ > label.cellMaxZ) return;
+          triangle ??= p.slice(i, i + 9);
+          cellTriangles[index].push(triangle);
+        });
+      }
+
+      layout.labels.forEach((label, labelIndex) => {
+        const triangles = cellTriangles[labelIndex];
+        // Each outline with its own bounding box: a sample further than
+        // KEEP_OFF_OUTLINE outside the box is further than that from the
+        // outline itself, so its distance need not be measured.
+        const glyphs = label.glyphs.map((glyph) => ({
+          glyph,
+          outlines: allLoops(glyph).map((loop) => ({
+            loop,
+            minX: Math.min(...loop.map((point) => point[0])) - KEEP_OFF_OUTLINE,
+            maxX: Math.max(...loop.map((point) => point[0])) + KEEP_OFF_OUTLINE,
+            minZ: Math.min(...loop.map((point) => point[1])) - KEEP_OFF_OUTLINE,
+            maxZ: Math.max(...loop.map((point) => point[1])) + KEEP_OFF_OUTLINE,
+          })),
+        }));
+        let labelStrokeSamples = 0;
+        for (let x = label.cellMinX + 0.0137; x < label.cellMaxX; x += STEP) {
+          for (let z = label.cellMinZ + 0.0071; z < label.cellMaxZ; z += STEP) {
+            let nearOutline = false;
+            let inStroke = false;
+            let inCounter = false;
+            for (const { glyph, outlines } of glyphs) {
+              for (const outline of outlines) {
+                if (x < outline.minX || x > outline.maxX || z < outline.minZ || z > outline.maxZ) continue;
+                if (distanceToLoop(outline.loop, x, z) < KEEP_OFF_OUTLINE) nearOutline = true;
+              }
+              if (pointInLoop(glyph.outer, x, z)) {
+                if (glyph.holes.some((hole) => pointInLoop(hole, x, z))) inCounter = true;
+                else inStroke = true;
+              }
+            }
+            if (nearOutline) continue;
+            const expectedTop = !inStroke ? 3 : label.style === "raised" ? 3 + LABEL_DEPTH : 3 - LABEL_DEPTH;
+
+            const crossings: number[] = [];
+            for (const t of triangles) {
+              const denom = (t[5] - t[8]) * (t[0] - t[6]) + (t[6] - t[3]) * (t[2] - t[8]);
+              const a = ((t[5] - t[8]) * (x - t[6]) + (t[6] - t[3]) * (z - t[8])) / denom;
+              const b = ((t[8] - t[2]) * (x - t[6]) + (t[0] - t[6]) * (z - t[8])) / denom;
+              const c = 1 - a - b;
+              if (a < 0 || b < 0 || c < 0) continue;
+              crossings.push(a * t[1] + b * t[4] + c * t[7]);
+            }
+            crossings.sort((m, n) => m - n);
+            const distinct = crossings.filter((y, index) => index === 0 || y - crossings[index - 1] > 1e-9);
+            // Exactly two surfaces on the way down: the expected top, and the
+            // bed face. Nothing in between -- solid all the way.
+            if (distinct.length !== 2 || Math.abs(distinct[0]) > 1e-9 || Math.abs(distinct[1] - expectedTop) > 1e-9) {
+              throw new Error(
+                `"${label.text}" ${label.style} at x=${x.toFixed(3)} z=${z.toFixed(3)}: expected surfaces [0, ${expectedTop}], found [${distinct.join(", ")}]`,
+              );
+            }
+            if (inStroke) {
+              strokeSamples += 1;
+              labelStrokeSamples += 1;
+            } else if (inCounter) counterSamples += 1;
+            else flatSamples += 1;
+          }
+        }
+        // Not vacuous: every label's strokes were actually sampled.
+        expect(labelStrokeSamples, `"${label.text}" ${label.style} stroke samples`).toBeGreaterThan(100);
+      });
+      expect(strokeSamples).toBeGreaterThan(expected.minStrokeSamples);
+      expect(counterSamples).toBeGreaterThan(expected.minCounterSamples);
+      expect(flatSamples).toBeGreaterThan(expected.minFlatSamples);
+      // Explicit timeout, a backstop only: this test takes about 1.4s on the
+      // dev box, and the GitHub CI runner is slower -- at about 2.2s here it
+      // overran vitest's 5s default there (CLAUDE-LESSONS.md, 2026-09-27).
+    }, 30_000);
+  });
+}
+
+describeTestPieceFile(TEST_PIECE_PATH, TEST_PIECE_OPTIONS, { triangles: 40864, minStrokeSamples: 5000, minCounterSamples: 100, minFlatSamples: 20000 });
+describeTestPieceFile(FRACTION_TEST_PIECE_PATH, FRACTION_TEST_PIECE_OPTIONS, { triangles: 14588, minStrokeSamples: 2000, minCounterSamples: 50, minFlatSamples: 8000 });
+
+describe("labelSlabPositions: fraction label test piece", () => {
+  const layout = labelSlabLayout(FRACTION_TEST_PIECE_OPTIONS);
+  const positions = labelSlabPositions(FRACTION_TEST_PIECE_OPTIONS);
+
+  it("carries six inch sizes twice: once raised, once recessed, side by side", () => {
+    expect([...LABEL_FRACTION_TEST_PIECE_LABELS]).toEqual(["3/16", "1/4", "5/16", "11/32", "9/16", "1-1/16"]);
+    expect(layout.labels.length).toBe(12);
+    const at = (row: number, column: number) => layout.labels.find((label) => label.row === row && label.column === column)!;
+    for (let row = 0; row < 3; row += 1) {
+      expect(at(row, 0)).toMatchObject({ text: LABEL_FRACTION_TEST_PIECE_LABELS[row], style: "raised" });
+      expect(at(row, 1)).toMatchObject({ text: LABEL_FRACTION_TEST_PIECE_LABELS[row], style: "recessed" });
+      expect(at(row, 2)).toMatchObject({ text: LABEL_FRACTION_TEST_PIECE_LABELS[row + 3], style: "raised" });
+      expect(at(row, 3)).toMatchObject({ text: LABEL_FRACTION_TEST_PIECE_LABELS[row + 3], style: "recessed" });
+    }
   });
 
-  it("the file itself is watertight, manifold and exact directed-edge manifold", () => {
-    const analysis = analyzeTriangleSoup(filePositions);
-    expect(analysis.triangleCount).toBe(40864);
+  it("is a plain 3mm slab sized just big enough for its labels, inside the bed", () => {
+    expect(layout.thickness).toBe(3);
+    // Depth: 3 margin + 3 rows of 5mm + 2 gaps of 3mm + 3 margin.
+    expect(layout.depth).toBe(27);
+    expect(layout.width).toBeCloseTo(89.5054, 3);
+    expect(layout.width).toBeLessThan(256);
+  });
+
+  it("is watertight, manifold and exact directed-edge manifold", () => {
+    const analysis = analyzeTriangleSoup(positions);
     expect(analysis.boundaryEdges).toBe(0);
     expect(analysis.nonManifoldEdges).toBe(0);
     expect(analysis.degenerateTriangles).toBe(0);
-    expect(directedEdgeDefects(filePositions)).toEqual([]);
+    expect(directedEdgeDefects(positions)).toEqual([]);
   });
 
-  it("raised where raised, recessed where recessed, flat everywhere else, solid underneath", () => {
-    const STEP = 0.21;
-    const KEEP_OFF_OUTLINE = 0.02;
-    let strokeSamples = 0;
-    let counterSamples = 0;
-    let flatSamples = 0;
-
-    // The file's triangles are filtered ONCE, not once per label: one pass
-    // drops the vertical ones (walls -- a vertical ray never crosses them)
-    // and hands each of the rest to every cell its plan bounding box
-    // touches, in file order.
-    const cellTriangles: number[][][] = layout.labels.map(() => []);
-    for (let i = 0; i + 8 < filePositions.length; i += 9) {
-      const p = filePositions;
-      const denom = (p[i + 5] - p[i + 8]) * (p[i] - p[i + 6]) + (p[i + 6] - p[i + 3]) * (p[i + 2] - p[i + 8]);
-      if (Math.abs(denom) < 1e-12) continue;
-      const minX = Math.min(p[i], p[i + 3], p[i + 6]);
-      const maxX = Math.max(p[i], p[i + 3], p[i + 6]);
-      const minZ = Math.min(p[i + 2], p[i + 5], p[i + 8]);
-      const maxZ = Math.max(p[i + 2], p[i + 5], p[i + 8]);
-      let triangle: number[] | null = null;
-      layout.labels.forEach((label, index) => {
-        if (maxX < label.cellMinX || minX > label.cellMaxX) return;
-        if (maxZ < label.cellMinZ || minZ > label.cellMaxZ) return;
-        triangle ??= p.slice(i, i + 9);
-        cellTriangles[index].push(triangle);
-      });
-    }
-
-    layout.labels.forEach((label, labelIndex) => {
-      const triangles = cellTriangles[labelIndex];
-      // Each outline with its own bounding box: a sample further than
-      // KEEP_OFF_OUTLINE outside the box is further than that from the
-      // outline itself, so its distance need not be measured.
-      const glyphs = label.glyphs.map((glyph) => ({
-        glyph,
-        outlines: allLoops(glyph).map((loop) => ({
-          loop,
-          minX: Math.min(...loop.map((point) => point[0])) - KEEP_OFF_OUTLINE,
-          maxX: Math.max(...loop.map((point) => point[0])) + KEEP_OFF_OUTLINE,
-          minZ: Math.min(...loop.map((point) => point[1])) - KEEP_OFF_OUTLINE,
-          maxZ: Math.max(...loop.map((point) => point[1])) + KEEP_OFF_OUTLINE,
-        })),
-      }));
-      let labelStrokeSamples = 0;
-      for (let x = label.cellMinX + 0.0137; x < label.cellMaxX; x += STEP) {
-        for (let z = label.cellMinZ + 0.0071; z < label.cellMaxZ; z += STEP) {
-          let nearOutline = false;
-          let inStroke = false;
-          let inCounter = false;
-          for (const { glyph, outlines } of glyphs) {
-            for (const outline of outlines) {
-              if (x < outline.minX || x > outline.maxX || z < outline.minZ || z > outline.maxZ) continue;
-              if (distanceToLoop(outline.loop, x, z) < KEEP_OFF_OUTLINE) nearOutline = true;
-            }
-            if (pointInLoop(glyph.outer, x, z)) {
-              if (glyph.holes.some((hole) => pointInLoop(hole, x, z))) inCounter = true;
-              else inStroke = true;
-            }
-          }
-          if (nearOutline) continue;
-          const expectedTop = !inStroke ? 3 : label.style === "raised" ? 3 + LABEL_DEPTH : 3 - LABEL_DEPTH;
-
-          const crossings: number[] = [];
-          for (const t of triangles) {
-            const denom = (t[5] - t[8]) * (t[0] - t[6]) + (t[6] - t[3]) * (t[2] - t[8]);
-            const a = ((t[5] - t[8]) * (x - t[6]) + (t[6] - t[3]) * (z - t[8])) / denom;
-            const b = ((t[8] - t[2]) * (x - t[6]) + (t[0] - t[6]) * (z - t[8])) / denom;
-            const c = 1 - a - b;
-            if (a < 0 || b < 0 || c < 0) continue;
-            crossings.push(a * t[1] + b * t[4] + c * t[7]);
-          }
-          crossings.sort((m, n) => m - n);
-          const distinct = crossings.filter((y, index) => index === 0 || y - crossings[index - 1] > 1e-9);
-          // Exactly two surfaces on the way down: the expected top, and the
-          // bed face. Nothing in between -- solid all the way.
-          if (distinct.length !== 2 || Math.abs(distinct[0]) > 1e-9 || Math.abs(distinct[1] - expectedTop) > 1e-9) {
-            throw new Error(
-              `"${label.text}" ${label.style} at x=${x.toFixed(3)} z=${z.toFixed(3)}: expected surfaces [0, ${expectedTop}], found [${distinct.join(", ")}]`,
-            );
-          }
-          if (inStroke) {
-            strokeSamples += 1;
-            labelStrokeSamples += 1;
-          } else if (inCounter) counterSamples += 1;
-          else flatSamples += 1;
-        }
-      }
-      // Not vacuous: every label's strokes were actually sampled.
-      expect(labelStrokeSamples, `"${label.text}" ${label.style} stroke samples`).toBeGreaterThan(100);
-    });
-    expect(strokeSamples).toBeGreaterThan(5000);
-    expect(counterSamples).toBeGreaterThan(100);
-    expect(flatSamples).toBeGreaterThan(20000);
-    // Explicit timeout, a backstop only: this test takes about 1.4s on the
-    // dev box, and the GitHub CI runner is slower -- at about 2.2s here it
-    // overran vitest's 5s default there (CLAUDE-LESSONS.md, 2026-09-27).
-  }, 30_000);
+  it("volume equals the plain slab's", () => {
+    const analysis = analyzeTriangleSoup(positions);
+    expect(Math.abs(analysis.volume)).toBeCloseTo(layout.width * layout.depth * layout.thickness, 6);
+  });
 });
 
 describe("labelSlabLayout: validation", () => {

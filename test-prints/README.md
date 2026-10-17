@@ -44,6 +44,13 @@ The following are NOT part of the byte-identical wrench-preset set above and
 carry no such stability guarantee — they may be regenerated or replaced
 freely as their primitives develop.
 
+- `label-fraction-test-piece.stl` — fraction label test piece
+  (`apps/web/src/lib/labelSlabGeometry.ts`, generator
+  `scripts/generate-label-fraction-test-piece.mjs`), a plain slab, 89.51 x
+  27 x 3mm (3.8mm over the raised labels), carrying "3/16", "1/4", "5/16",
+  "11/32", "9/16" and "1-1/16", each once raised 0.8mm and once recessed
+  0.8mm; 12 labels, 14,588 triangles. Checks the "/" (the module's bold
+  slash) and "-" label characters added 2026-10-17. **Unprinted.**
 - `socket-tray-sampler.stl` — Socket Tray coupon
   (`apps/web/src/lib/socketTrayGeometry.ts`), 240 x 60 x 18mm, one row of 6
   round blind pockets at real measured diameters (14, 15, 19, 20.70, 23,

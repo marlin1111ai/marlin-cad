@@ -48,8 +48,10 @@ import helvetikerBoldFontJson from "three/examples/fonts/helvetiker_bold.typefac
 export const LABEL_DIGIT_HEIGHT = 5;
 // Raised height above / recessed depth below the top face.
 export const LABEL_DEPTH = 0.8;
-// The only characters a label may contain (see file header).
-export const LABEL_CHARACTERS = "0123456789m";
+// The only characters a label may contain (see file header). "-" and "/"
+// were added 2026-10-17 for fractional sizes like "3/16"; "/" is this
+// module's own bold slash, not the font's (see BOLD_SLASH_OUTLINE).
+export const LABEL_CHARACTERS = "0123456789m-/";
 // Points sampled per quadratic curve of a glyph outline.
 export const LABEL_CURVE_DIVISIONS = 8;
 // Minimum material kept under a recessed label's floor -- this module's own
@@ -101,7 +103,24 @@ export type LabelOutline = {
   maxY: number;
 };
 
-const LABEL_FONT_DATA = helvetikerBoldFontJson as unknown as FontData;
+// Helvetiker bold's own "/" is a 0.45mm stroke at label size -- about one
+// line width, so it prints faint raised and fills in recessed (the
+// slicer-slit-fusion lesson) -- and it reaches 0.47mm below and 0.25mm
+// above the digit band, outside the box the trays keep clear around a
+// label. The owner chose a bold slash instead (2026-10-17): the font's own
+// slant and position, the stroke of the "1" (194 font units across, measured
+// square to the stroke), running from the baseline to the "1"'s flat top
+// (984). Font units, integer corners, same winding as the font's slash; its
+// advance ("ha") is the font's, so spacing between characters is unchanged.
+const BOLD_SLASH_OUTLINE = "m 670 984 l 381 0 l 179 0 l 468 984 l 670 984 ";
+
+const FONT_JSON = helvetikerBoldFontJson as unknown as { glyphs: Record<string, Record<string, unknown>> };
+// A copy, so the shared imported font object is never changed. Every other
+// glyph is the font's own object.
+const LABEL_FONT_DATA = {
+  ...FONT_JSON,
+  glyphs: { ...FONT_JSON.glyphs, "/": { ...FONT_JSON.glyphs["/"], x_min: 179, x_max: 670, o: BOLD_SLASH_OUTLINE } },
+} as unknown as FontData;
 const LABEL_FONT = new Font(LABEL_FONT_DATA);
 const LABEL_FONT_RESOLUTION = (helvetikerBoldFontJson as unknown as { resolution: number }).resolution;
 
@@ -580,6 +599,39 @@ export function labelTestPieceOptions(): LabelSlabOptions {
   for (let row = 0; row < half; row += 1) {
     const left = socketSizeLabel(LABEL_TEST_PIECE_SOCKET_SIZES[row]);
     const right = socketSizeLabel(LABEL_TEST_PIECE_SOCKET_SIZES[row + half]);
+    rows.push([
+      { text: left, style: "raised" },
+      { text: left, style: "recessed" },
+      { text: right, style: "raised" },
+      { text: right, style: "recessed" },
+    ]);
+  }
+  return {
+    thickness: DEFAULT_LABEL_SLAB_THICKNESS,
+    margin: DEFAULT_LABEL_SLAB_MARGIN,
+    gap: DEFAULT_LABEL_SLAB_GAP,
+    rows,
+  };
+}
+
+// ===== the fraction label test piece =====
+
+// Inch socket sizes chosen to print-check "/" and "-" (added 2026-10-17)
+// before they are used on a tray: the bold slash beside round digits (3, 5,
+// 9), beside straight ones (1, 4), next to the tightest digit pair the font
+// has ("32"), and the dash in a mixed number.
+export const LABEL_FRACTION_TEST_PIECE_LABELS = ["3/16", "1/4", "5/16", "11/32", "9/16", "1-1/16"] as const;
+
+// Every fraction label twice -- once raised, once recessed -- on a plain
+// 3mm slab, laid out like the metric test piece. Three rows of four: each
+// row reads
+//   [label raised] [label recessed] [label + 3 raised] [label + 3 recessed]
+export function labelFractionTestPieceOptions(): LabelSlabOptions {
+  const half = LABEL_FRACTION_TEST_PIECE_LABELS.length / 2;
+  const rows: LabelSlabCell[][] = [];
+  for (let row = 0; row < half; row += 1) {
+    const left = LABEL_FRACTION_TEST_PIECE_LABELS[row];
+    const right = LABEL_FRACTION_TEST_PIECE_LABELS[row + half];
     rows.push([
       { text: left, style: "raised" },
       { text: left, style: "recessed" },

@@ -233,6 +233,33 @@ describe("gridfinity socket tray: closed solid", () => {
     }
   });
 
+  // "/" and "-" were added 2026-10-17 for inch sizes (DECISIONS.md).
+  it("closes with inch-size labels, in both styles, their ink inside each label's box", () => {
+    const holes: GridfinitySocketTrayHole[] = [
+      { diameter: 14, x: 22, z: 60, label: "3/16" },
+      { diameter: 14, x: 62, z: 60, label: "1-1/16" },
+      { diameter: 14, x: 102, z: 60, label: "11/32" },
+      { diameter: 14, x: 40, z: 26, label: "3/8" },
+    ];
+    const { labels } = gridfinitySocketTrayLayout({ squaresX: 3, squaresZ: 2, holes });
+    for (const labelStyle of STYLES) {
+      const positions = gridfinitySocketTrayPositions({ squaresX: 3, squaresZ: 2, holes, labelStyle });
+      expect(directedEdgeDefects(positions)).toEqual([]);
+      const analysis = analyzeTriangleSoup(positions);
+      expect([analysis.boundaryEdges, analysis.nonManifoldEdges]).toEqual([0, 0]);
+      const faceY = labelStyle === "raised" ? TOP_Y + LABEL_DEPTH : TOP_Y - LABEL_DEPTH;
+      for (const label of labels) {
+        for (let i = 0; i < positions.length; i += 3) {
+          if (positions[i + 1] !== faceY) continue;
+          if (positions[i] < label.minX - 1e-9 || positions[i] > label.maxX + 1e-9) continue;
+          if (positions[i + 2] < label.minZ - 1 || positions[i + 2] > label.maxZ + 1) continue;
+          expect(positions[i + 2], label.text).toBeGreaterThanOrEqual(label.minZ - 1e-9);
+          expect(positions[i + 2], label.text).toBeLessThanOrEqual(label.maxZ + 1e-9);
+        }
+      }
+    }
+  });
+
   it("builds a float32 geometry with the same triangle count", () => {
     const positions = gridfinitySocketTrayPositions(defaultTray());
     const geometry = createGridfinitySocketTrayGeometry(defaultTray());
@@ -619,9 +646,11 @@ describe("gridfinity socket tray: guards", () => {
     expect(tray([pair[0], { ...pair[1], x: 49 }], { cornerRadius: 1 })).not.toThrow();
   });
 
-  it("label text: only 0123456789m", () => {
-    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5 mm" }])).toThrow(/label 0: "5 mm" contains " "; only the characters 0123456789m are supported/);
-    expect(tray([{ diameter: 14, x: 60, z: 40, label: "3/8" }])).toThrow(/label 0: "3\/8" contains "\/"/);
+  it("label text: only 0123456789m-/", () => {
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5 mm" }])).toThrow(/label 0: "5 mm" contains " "; only the characters 0123456789m-\/ are supported/);
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "5.5" }])).toThrow(/label 0: "5.5" contains "\."/);
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "3/8" }])).not.toThrow();
+    expect(tray([{ diameter: 14, x: 60, z: 40, label: "1-1/16" }])).not.toThrow();
     expect(tray([{ diameter: 14, x: 60, z: 40, label: "16mm" }])).not.toThrow();
   });
 

@@ -319,8 +319,11 @@ built on labels.
   Boundary-rep only, no CSG. Not registered in the editor.
 - Font: Helvetiker bold, from three's bundled typeface fonts. One uniform
   scale makes the digit set 0–9 exactly 5.00mm tall; individual digits
-  measure 4.69mm to 4.99mm. Only the characters `0123456789m` are accepted.
-- Tests: `tests/unit/labelSlabGeometry.test.ts` — 49 tests, including the
+  measure 4.69mm to 4.99mm. Only the characters `0123456789m-/` are accepted;
+  "-" and "/" were added 2026-10-17, and "/" is the module's own bold slash
+  (DECISIONS.md).
+- Tests: `tests/unit/labelSlabGeometry.test.ts` — 61 tests (49 until the
+  2026-10-17 slash/dash change), including the
   exact directed-edge test on every label in both styles and a byte-for-byte
   match between the committed STL and the module. The raycast test was sped
   up in `6f8813f` after it timed out in CI on `742dcb1` and `e40575f`.
@@ -330,6 +333,10 @@ built on labels.
   40,864 triangles.
 - Status: **printed 2026-09-27 and passed** — the owner reported "they all
   good" (DECISIONS.md).
+- Fraction label test piece (2026-10-17): `test-prints/label-fraction-test-piece.stl`,
+  generator `scripts/generate-label-fraction-test-piece.mjs` — 89.51 × 27 ×
+  3mm, "3/16", "1/4", "5/16", "11/32", "9/16" and "1-1/16", each raised and
+  recessed; 14,588 triangles. **Unprinted.**
 
 ## Gridfinity foot test piece — printed and passed
 
@@ -366,7 +373,8 @@ trays are unchanged by this work.
 - Holes: owner-typed diameter, X from the left edge and Z from the edge
   nearest the viewer, which is geometry Z = depth; Z is turned into geometry
   space at one marked spot (`normalizedHoles`). No auto-layout.
-- Labels: text typed per hole (`0123456789m` only, blank for none),
+- Labels: text typed per hole (`0123456789m-/` only, blank for none;
+  "-" and "/" since 2026-10-17, test piece unprinted),
   Helvetiker bold, centred on the hole, 3mm in front of its rim. One
   raised / recessed setting for the whole tray, default raised.
 - Corner Radius: owner-typed, on every hole's top edge and the top
@@ -776,6 +784,8 @@ paragraph began "The two deploys recorded so far" until then.
   printed 2026-09-27 and passed in the owner's baseplate.
 - Gridfinity Socket Tray, the default insert: printed 2026-09-27; "it prints
   and works".
+- Fraction label test piece (`test-prints/label-fraction-test-piece.stl`):
+  not yet printed; checks the "/" and "-" label characters.
 - Screwdriver Tray and Mounted Screwdriver Tray: not printed; no candidate
   file.
 
@@ -786,6 +796,11 @@ paragraph began "The two deploys recorded so far" until then.
 - OpenGrid Snap — 4 variants.
 
 ## Test suite
+
+2026-10-17, after the slash/dash label change: 752 unit tests passing
+across 58 files; `tests/unit/labelSlabGeometry.test.ts` has 61 and
+`tests/unit/gridfinitySocketTrayGeometry.test.ts` 65. The paragraph below
+is the 2026-09-27 count.
 
 739 unit tests passing across 58 files (`npm test`, re-run 2026-09-27 on
 `0803ac0`, not carried forward), of which 36 are in
