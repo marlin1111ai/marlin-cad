@@ -473,11 +473,13 @@ unprinted. Both coupons remain unprinted.
 
 ## Recent shipped work (all pushed to origin/main)
 
-- Labels take any keyboard text (2026-10-17): whatever is typed in a
+- Labels take any keyboard text (`4648fe0`, 2026-10-17): whatever is typed in a
   Gridfinity Socket Tray hole's label box is the label, capitals and spaces
   kept. Only characters off the keyboard (emoji, accents) are dropped.
   Every keyboard character is tested closed, raised and recessed; no label
-  with letters has been printed. Not deployed.
+  with letters has been printed. **Deployed to Unraid 2026-10-17**: "docker
+  updated and working" (`reference/reports/label-any-text-deploy-2026-10-17.md`).
+  This line read "Not deployed" until then.
 
 - Labels accept "-" and "/" (`5132034`, 2026-10-17): inch sizes such as
   "3/16" can be typed on the Gridfinity Socket Tray; "/" is the label
@@ -643,12 +645,18 @@ unprinted. Both coupons remain unprinted.
   there. **Corrected 2026-09-28:** until then this line read "Docker runs on
   Unraid only"; Docker is installed on the dev box for another project, and
   marlin-cad does not use it (Dev environment, above).
-- **Since 2026-10-17 the container runs the image built from `5132034`**
+- **Since 2026-10-17 the container runs the image built from `4648fe0`**
+  (`sha256:19dfb03dee370b3f7977d8577771c3b7b76d4b8d85835b554cf8af8fd71b7990`,
+  also tagged `sha-4648fe0`) under the `1.3.4` tag. Labels take any keyboard
+  text. The owner force-updated and reported "docker updated and working";
+  see `reference/reports/label-any-text-deploy-2026-10-17.md`. The rollback
+  tag is now `sha-5132034`, the build named in the next bullet.
+- **Earlier on 2026-10-17 the container ran the image built from `5132034`**
   (`sha256:792f027b17a28e9b9a4ed66fe6e4a07fe4d7f1ea1483fd301d2af13f29bb791c`,
   also tagged `sha-5132034`) under the `1.3.4` tag. It adds "-" and "/" to
   label text. The owner force-updated and reported "all good works"; see
-  `reference/reports/label-slash-dash-deploy-2026-10-17.md`. The rollback
-  tag is now `sha-d80e102`, the build named in the next bullet.
+  `reference/reports/label-slash-dash-deploy-2026-10-17.md`. Its rollback
+  tag was `sha-d80e102`, the build named in the next bullet.
 - **From 2026-09-29 to 2026-10-17 the container ran the image built from `d80e102`**
   (`sha256:f7d1836999c4d7ae1fce3e767d1017970463d629163c9ec7f81704f01f6e182b`,
   also tagged `sha-d80e102`) under the `1.3.4` tag. It adds the paste fix
