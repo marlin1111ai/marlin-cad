@@ -471,6 +471,31 @@ terms, never a comparison against these frozen zero-radius files.
 built, deployed and printed by the owner while both coupons were still
 unprinted. Both coupons remain unprinted.
 
+## Projects saved on the server — built, not yet deployed
+
+- Owner's request, 2026-10-18: projects only lived in one browser, so
+  Safari showed none of the projects made in Chrome. Every project now also
+  saves to the server automatically and shows up in any browser
+  (DECISIONS.md, "Projects are saved on the server, automatically").
+- Server: `apps/web/src/app/api/projects/route.ts`, files in
+  `/data/projects/library` (`<id>.skf` + `<id>.json`). Turns on whenever
+  `SKETCHFORGE_SHARED_PROJECTS_DIR` is set (baked into the image);
+  `SKETCHFORGE_PROJECTS_DIR` overrides the folder. Plain `npm run dev` has
+  neither, so the feature is off in dev unless one is set.
+- Browser: sync in `apps/web/src/app/page.tsx` (`syncLibraryOnce`), rules in
+  `apps/web/src/lib/projectLibrarySync.ts`. The dashboard's Projects line
+  shows "Saved on server", "Saving to server…", or "Not saved to server: "
+  and the error.
+- Tests: `tests/unit/projectLibrary.test.ts`, 11 tests. Also checked in the
+  real app with two separate headless Chrome profiles: an STL imported in
+  one was saved on the server, listed and opened (with its shape) in the
+  other, and deleting it in the first removed it from the second.
+- Not deployed. Whether `/mnt/user/appdata/marlin-cad/projects` is writable
+  by the container is still untested (OPEN-ITEMS.md); the first visit after
+  the update shows it. Thumbnails are still on the container's disposable
+  layer (OPEN-ITEMS.md), so pictures can go missing on recreate while the
+  projects stay.
+
 ## Recent shipped work (all pushed to origin/main)
 
 - Labels take any keyboard text (`4648fe0`, 2026-10-17): whatever is typed in a

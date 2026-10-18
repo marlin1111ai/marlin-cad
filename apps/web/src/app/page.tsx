@@ -16,6 +16,7 @@ import {
   type PlacementWorkplane,
 } from "@/lib/placementWorkplane";
 import { attachProjectAsset, dedupeProjectAssets, projectAssetFromBytes, sourceFormatForFileName } from "@/lib/projectAssets";
+import { planProjectLibrarySync, type LibrarySyncServerEntry } from "@/lib/projectLibrarySync";
 import { hydrateProjectShapeState, reconcileLoadedProjectShapeCacheEntry, type ImportedMeshResource } from "@/lib/projectShapePersistence";
 import { exportSkfProject, importSkfProject, SKF_CREATED_WITH_VERSION } from "@/lib/skfProject";
 import { importExtensionSupported } from "@/lib/importExtensions";
@@ -52,6 +53,10 @@ type SharedProject = {
   size: number;
   revision: string;
 };
+
+type LibrarySyncStatus = { state: "off" | "syncing" | "saved" | "error"; message?: string };
+
+type LibraryServerEntry = LibrarySyncServerEntry & { name?: unknown };
 
 type StoredDashboardProject = Partial<DashboardProject> & {
   designShapes?: unknown;
@@ -375,6 +380,96 @@ async function deleteProjectShapes(projectId: string) {
   });
 }
 
+async function readProjectShapeRecord(projectId: string) {
+  const database = await openProjectShapesDb();
+  try {
+    return await new Promise<ProjectShapeRecord | null>((resolve, reject) => {
+      const request = database.transaction(PROJECT_SHAPES_STORE_NAME, "readonly").objectStore(PROJECT_SHAPES_STORE_NAME).get(projectId);
+      request.onerror = () => reject(request.error ?? new Error("Could not read project shapes"));
+      request.onsuccess = () => resolve((request.result as ProjectShapeRecord | undefined) ?? null);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+// Stores a project file downloaded from the server as this browser's copy.
+async function storeProjectSkfPackage(projectId: string, revision: number, skfPackage: Uint8Array) {
+  const database = await openProjectShapesDb();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(PROJECT_SHAPES_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(PROJECT_SHAPES_STORE_NAME);
+    const existingRequest = store.get(projectId);
+    existingRequest.onsuccess = () => {
+      const existing = existingRequest.result as ProjectShapeRecord | undefined;
+      // A local edit saved meanwhile is newer than the download; keep it.
+      if (existing && existing.revision > revision) return;
+      store.put({ id: projectId, revision, skfPackage, updatedAt: Date.now() } satisfies ProjectShapeRecord);
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Could not store the project from the server"));
+    };
+  });
+}
+
+// The .skf bytes this browser holds for a project, for uploading to the server.
+async function projectSkfBytesForUpload(project: DashboardProject) {
+  const record = await readProjectShapeRecord(project.id);
+  if (record?.skfPackage) return record.skfPackage;
+  // Older record formats, or no record yet: build the package from what loads.
+  const loaded = record ? await loadProjectShapes(project.id) : null;
+  const context = projectShapeSaveContext(project);
+  const revision = project.revision ?? project.updatedAt;
+  const entry = projectShapeCacheEntry(revision, loaded?.shapes ?? [], loaded?.history, loaded?.historyIndex, loaded?.assets ?? []);
+  return exportSkfProject({
+    projectId: project.id,
+    projectName: context.projectName,
+    createdAt: context.createdAt,
+    modifiedAt: revision,
+    shapes: entry.shapes,
+    history: entry.history,
+    historyIndex: entry.historyIndex,
+    assets: entry.assets,
+    workspace: context.workspace,
+    snapGrid: context.snapGrid,
+    placementElevation: context.placementElevation,
+    placementWorkplane: context.placementWorkplane,
+    sketchPlacementWorkplane: context.sketchPlacementWorkplane,
+    compressionLevel: 1,
+  });
+}
+
+function normalizeStoredProject(project: StoredDashboardProject, index: number): DashboardProject {
+  const id = project.id as string;
+  const updatedAt = typeof project.updatedAt === "number" ? project.updatedAt : Date.now();
+  const revision = typeof project.revision === "number" ? project.revision : updatedAt;
+  const designShapes = Array.isArray(project.designShapes) ? (project.designShapes as WorkplaneShape[]) : null;
+  return {
+    id,
+    name: project.name as string,
+    createdAt: typeof project.createdAt === "number" ? project.createdAt : Date.now(),
+    updatedAt,
+    shapes: typeof project.shapes === "number" ? project.shapes : (designShapes?.length ?? 0),
+    accent: PROJECT_ACCENTS.includes(project.accent as DashboardProject["accent"]) ? (project.accent as DashboardProject["accent"]) : PROJECT_ACCENTS[index % PROJECT_ACCENTS.length],
+    thumbnailUrl: typeof project.thumbnailUrl === "string" ? project.thumbnailUrl : null,
+    thumbnailVersion: typeof project.thumbnailVersion === "number" ? project.thumbnailVersion : undefined,
+    revision,
+    workspace: normalizeWorkspaceSettings(project.workspace),
+    snapGrid: normalizeSnapGrid(project.snapGrid),
+    placementElevation: typeof project.placementElevation === "number" && Number.isFinite(project.placementElevation) ? project.placementElevation : 0,
+    placementWorkplane: normalizePlacementWorkplane(project.placementWorkplane, project.placementElevation),
+    sketchPlacementWorkplane: normalizePlacementWorkplane(project.sketchPlacementWorkplane),
+    sharedProject: typeof project.sharedProject?.fileName === "string" && typeof project.sharedProject.revision === "string"
+      ? { fileName: project.sharedProject.fileName, revision: project.sharedProject.revision }
+      : undefined,
+  };
+}
+
 function readStoredProjects() {
   const legacyShapes: Record<string, ProjectShapeCacheEntry> = {};
   if (typeof window === "undefined") return { projects: [] as DashboardProject[], legacyShapes };
@@ -383,32 +478,12 @@ function readStoredProjects() {
     const projects = parsed
       .filter((project) => typeof project.id === "string" && typeof project.name === "string")
       .map((project, index) => {
-        const id = project.id as string;
-        const updatedAt = typeof project.updatedAt === "number" ? project.updatedAt : Date.now();
-        const revision = typeof project.revision === "number" ? project.revision : updatedAt;
         const designShapes = Array.isArray(project.designShapes) ? (project.designShapes as WorkplaneShape[]) : null;
+        const normalized = normalizeStoredProject(project, index);
         if (designShapes) {
-          legacyShapes[id] = projectShapeCacheEntry(revision, designShapes);
+          legacyShapes[normalized.id] = projectShapeCacheEntry(normalized.revision ?? normalized.updatedAt, designShapes);
         }
-        return {
-          id,
-          name: project.name as string,
-          createdAt: typeof project.createdAt === "number" ? project.createdAt : Date.now(),
-          updatedAt,
-          shapes: typeof project.shapes === "number" ? project.shapes : (designShapes?.length ?? 0),
-          accent: PROJECT_ACCENTS.includes(project.accent as DashboardProject["accent"]) ? (project.accent as DashboardProject["accent"]) : PROJECT_ACCENTS[index % PROJECT_ACCENTS.length],
-          thumbnailUrl: typeof project.thumbnailUrl === "string" ? project.thumbnailUrl : null,
-          thumbnailVersion: typeof project.thumbnailVersion === "number" ? project.thumbnailVersion : undefined,
-          revision,
-          workspace: normalizeWorkspaceSettings(project.workspace),
-          snapGrid: normalizeSnapGrid(project.snapGrid),
-          placementElevation: typeof project.placementElevation === "number" && Number.isFinite(project.placementElevation) ? project.placementElevation : 0,
-          placementWorkplane: normalizePlacementWorkplane(project.placementWorkplane, project.placementElevation),
-          sketchPlacementWorkplane: normalizePlacementWorkplane(project.sketchPlacementWorkplane),
-          sharedProject: typeof project.sharedProject?.fileName === "string" && typeof project.sharedProject.revision === "string"
-            ? { fileName: project.sharedProject.fileName, revision: project.sharedProject.revision }
-            : undefined,
-        };
+        return normalized;
       });
     return { projects, legacyShapes };
   } catch {
@@ -543,6 +618,129 @@ export default function Home() {
     }
   }, []);
 
+  // Server copy of every project (see /api/projects), so any browser shows them.
+  const [librarySync, setLibrarySync] = useState<LibrarySyncStatus>({ state: "off" });
+  const projectsRef = useRef<DashboardProject[]>([]);
+  const viewRef = useRef<AppView>("dashboard");
+  const activeProjectIdRef = useRef<string | null>(null);
+  const deletedThisSessionRef = useRef(new Set<string>());
+  const librarySyncRunningRef = useRef(false);
+  const librarySyncAgainRef = useRef(false);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+    viewRef.current = view;
+    activeProjectIdRef.current = activeProjectId;
+  }, [activeProjectId, projects, view]);
+
+  const removeLocalProjects = useCallback((ids: Set<string>) => {
+    setProjects((current) => current.filter((project) => !ids.has(project.id)));
+    setProjectShapesById((current) => {
+      const next = { ...current };
+      ids.forEach((id) => delete next[id]);
+      return next;
+    });
+    ids.forEach((id) => void deleteProjectShapes(id).catch(() => undefined));
+  }, []);
+
+  const syncLibraryOnce = useCallback(async () => {
+    const response = await fetch("/api/projects", { cache: "no-store" });
+    const payload = await response.json().catch(() => ({})) as { enabled?: boolean; projects?: LibraryServerEntry[]; error?: string };
+    if (!payload.enabled) {
+      setLibrarySync({ state: "off" });
+      return;
+    }
+    if (!response.ok) throw new Error(payload.error ?? "Could not reach the server");
+    const serverEntries = (Array.isArray(payload.projects) ? payload.projects : [])
+      .filter((entry) => entry.deleted || typeof entry.name === "string");
+    const local = projectsRef.current;
+    const busyIds = new Set<string>();
+    // Never swap out the project open in the editor; it gets pulled on return to the dashboard.
+    if (viewRef.current === "editor" && activeProjectIdRef.current) busyIds.add(activeProjectIdRef.current);
+    const plan = planProjectLibrarySync(local, serverEntries, { busyIds, pendingDeleteIds: deletedThisSessionRef.current });
+    if (!plan.uploads.length && !plan.downloads.length && !plan.localDeletes.length) {
+      setLibrarySync({ state: "saved" });
+      return;
+    }
+    setLibrarySync({ state: "syncing" });
+    const serverById = new Map(serverEntries.map((entry) => [entry.id, entry]));
+
+    if (plan.localDeletes.length) removeLocalProjects(new Set(plan.localDeletes));
+
+    const downloaded: DashboardProject[] = [];
+    for (const id of plan.downloads) {
+      const entry = serverById.get(id);
+      if (!entry) continue;
+      const fileResponse = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (!fileResponse.ok) throw new Error(`Could not download "${String(entry.name)}" from the server`);
+      await storeProjectSkfPackage(id, entry.revision, new Uint8Array(await fileResponse.arrayBuffer()));
+      const localIndex = local.findIndex((project) => project.id === id);
+      downloaded.push(normalizeStoredProject(entry as StoredDashboardProject, localIndex >= 0 ? localIndex : local.length + downloaded.length));
+      nextProjectRevisionRef.current = Math.max(nextProjectRevisionRef.current, entry.revision);
+    }
+    if (downloaded.length) {
+      const downloadedById = new Map(downloaded.map((project) => [project.id, project]));
+      setProjects((current) => [
+        ...current.map((project) => {
+          const fromServer = downloadedById.get(project.id);
+          return fromServer && (project.revision ?? 0) <= (fromServer.revision ?? 0) ? fromServer : project;
+        }),
+        ...downloaded.filter((project) => !current.some((candidate) => candidate.id === project.id)),
+      ]);
+      setProjectShapesById((current) => {
+        const next = { ...current };
+        downloaded.forEach((project) => {
+          // Drop the in-memory copy so the next open reads the downloaded file.
+          if ((next[project.id]?.revision ?? 0) <= (project.revision ?? 0)) delete next[project.id];
+        });
+        return next;
+      });
+    }
+
+    for (const id of plan.uploads) {
+      const project = projectsRef.current.find((candidate) => candidate.id === id);
+      if (!project) continue;
+      const bytes = await projectSkfBytesForUpload(project);
+      const form = new FormData();
+      form.set("meta", JSON.stringify(projectForStorage(project)));
+      form.set("file", new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]), `${id}.skf`);
+      const uploadResponse = await fetch(`/api/projects?id=${encodeURIComponent(id)}`, { method: "POST", body: form });
+      if (uploadResponse.status === 409) {
+        // The server has a newer copy; the next pass pulls it down.
+        librarySyncAgainRef.current = true;
+        continue;
+      }
+      if (uploadResponse.status === 410) {
+        removeLocalProjects(new Set([id]));
+        continue;
+      }
+      if (!uploadResponse.ok) {
+        const uploadPayload = await uploadResponse.json().catch(() => ({})) as { error?: string };
+        throw new Error(uploadPayload.error ?? `Could not save "${project.name}" to the server`);
+      }
+    }
+    setLibrarySync({ state: "saved" });
+  }, [removeLocalProjects]);
+
+  const runLibrarySync = useCallback(async () => {
+    if (STATIC_EXPORT_BUILD) return;
+    if (librarySyncRunningRef.current) {
+      librarySyncAgainRef.current = true;
+      return;
+    }
+    librarySyncRunningRef.current = true;
+    try {
+      do {
+        librarySyncAgainRef.current = false;
+        await syncLibraryOnce();
+      } while (librarySyncAgainRef.current);
+    } catch (error) {
+      setLibrarySync({ state: "error", message: error instanceof Error ? error.message : "Could not save to the server" });
+    } finally {
+      librarySyncRunningRef.current = false;
+    }
+  }, [syncLibraryOnce]);
+
   useEffect(() => {
     const storedTheme = readStoredAppTheme(window.localStorage);
     setThemePreference(storedTheme);
@@ -603,6 +801,26 @@ export default function Home() {
     if (!mounted) return;
     void refreshSharedProjects();
   }, [mounted, refreshSharedProjects]);
+
+  // Sync with the server shortly after any change settles, and on returning to the tab.
+  useEffect(() => {
+    if (!mounted) return;
+    const timer = window.setTimeout(() => void runLibrarySync(), 2000);
+    return () => window.clearTimeout(timer);
+  }, [mounted, projects, view, runLibrarySync]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const onReturn = () => {
+      if (document.visibilityState === "visible") void runLibrarySync();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [mounted, runLibrarySync]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1166,6 +1384,13 @@ export default function Home() {
     }
     if (!STATIC_EXPORT_BUILD) {
       void fetch(`/api/project-thumbnail?projectId=${encodeURIComponent(projectId)}`, { method: "DELETE" });
+      // Kept for the whole session so a sync already in flight cannot bring it back.
+      deletedThisSessionRef.current.add(projectId);
+      void fetch(`/api/projects?id=${encodeURIComponent(projectId)}`, { method: "DELETE" })
+        .then((response) => {
+          if (!response.ok && response.status !== 404) throw new Error();
+        })
+        .catch(() => setDashboardNotice("Deleted here, but could not delete the server copy"));
     }
     void deleteProjectShapes(projectId).catch(() => {
       setDashboardNotice("Could not delete project shapes from local storage");
@@ -1175,8 +1400,11 @@ export default function Home() {
   const renameProject = (projectId: string, name: string) => {
     const nextName = name.trim().slice(0, 80);
     if (!nextName) return;
+    // A rename bumps the revision so the new name wins in other browsers.
+    const revision = Math.max(Date.now(), nextProjectRevisionRef.current + 1);
+    nextProjectRevisionRef.current = revision;
     setProjects((current) =>
-      current.map((project) => (project.id === projectId ? { ...project, name: nextName, updatedAt: Date.now() } : project)),
+      current.map((project) => (project.id === projectId ? { ...project, name: nextName, updatedAt: Date.now(), revision } : project)),
     );
   };
 
@@ -1228,6 +1456,7 @@ export default function Home() {
           sharedProjects={visibleSharedProjects}
           sharedProjectsEnabled={sharedProjectsEnabled}
           sharedProjectsLoading={sharedProjectsLoading}
+          librarySync={librarySync}
           staticExportBuild={STATIC_EXPORT_BUILD}
           sortMode={sortMode}
           viewMode={viewMode}
@@ -1383,6 +1612,7 @@ function Dashboard({
   sharedProjects,
   sharedProjectsEnabled,
   sharedProjectsLoading,
+  librarySync,
   staticExportBuild,
   sortMode,
   viewMode,
@@ -1418,6 +1648,7 @@ function Dashboard({
   sharedProjects: SharedProject[];
   sharedProjectsEnabled: boolean;
   sharedProjectsLoading: boolean;
+  librarySync: LibrarySyncStatus;
   staticExportBuild: boolean;
   sortMode: string;
   viewMode: ViewMode;
@@ -1788,7 +2019,12 @@ function Dashboard({
               <div className="dashboard-section-header">
                 <div>
                   <h1>Projects</h1>
-                  <span>{projects.length} visible</span>
+                  <span>
+                    {projects.length} visible
+                    {librarySync.state === "saved" ? " · Saved on server" : null}
+                    {librarySync.state === "syncing" ? " · Saving to server…" : null}
+                    {librarySync.state === "error" ? ` · Not saved to server: ${librarySync.message ?? "unknown error"}` : null}
+                  </span>
                 </div>
                 <div className="dashboard-controls">
                   <label className="dashboard-select">
