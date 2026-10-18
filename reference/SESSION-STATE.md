@@ -757,6 +757,11 @@ unprinted. Both coupons remain unprinted.
 - Blinking Docker Manager icon fix re-applied on Unraid:
   `cp /mnt/user/appdata/marlin-cad/freecad.png /usr/local/emhttp/plugins/dynamix.docker.manager/images/question.png`
   — RAM-only, lost on reboot.
+  **Replaced 2026-10-18:** the container now has a web-hosted Icon URL
+  (the repo's SketchForge logo), owner reported "fixed"; see KNOWN-FIXES.md.
+  The Apply that saved it recreates the container from the `1.3.4` tag,
+  which may also have installed `379db45` (projects saved on the server);
+  that is not confirmed.
 - Dev on the Linux box is unchanged: `npm run dev`, port 3000. The container
   never binds 3000 on the host.
 - Image built from `deploy/docker/Dockerfile`; the root Dockerfile was removed
