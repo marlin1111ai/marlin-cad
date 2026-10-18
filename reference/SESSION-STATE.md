@@ -471,7 +471,7 @@ terms, never a comparison against these frozen zero-radius files.
 built, deployed and printed by the owner while both coupons were still
 unprinted. Both coupons remain unprinted.
 
-## Projects saved on the server — built, not yet deployed
+## Projects saved on the server — deployed and working
 
 - Owner's request, 2026-10-18: projects only lived in one browser, so
   Safari showed none of the projects made in Chrome. Every project now also
@@ -495,6 +495,15 @@ unprinted. Both coupons remain unprinted.
   the update shows it. Thumbnails are still on the container's disposable
   layer (OPEN-ITEMS.md), so pictures can go missing on recreate while the
   projects stay.
+- **Deployed and working, 2026-10-18.** Unraid runs `1.3.4` with it. The
+  first save failed with `EACCES: permission denied, mkdir
+  '/data/projects/library'`: the mapped folder was not writable by the
+  container's user (uid 1000). The owner ran
+  `mkdir -p /mnt/user/appdata/marlin-cad/projects/library && chmod -R a+rwX /mnt/user/appdata/marlin-cad/projects`
+  in Unraid's web terminal; the server then listed 4 projects (read from the
+  dev box, `http://192.168.1.250:3001/api/projects`), and the owner sees the
+  same projects in Safari and Wavebox. The "Not deployed" line above
+  describes the state before this.
 
 ## Recent shipped work (all pushed to origin/main)
 
@@ -761,7 +770,8 @@ unprinted. Both coupons remain unprinted.
   (the repo's SketchForge logo), owner reported "fixed"; see KNOWN-FIXES.md.
   The Apply that saved it recreates the container from the `1.3.4` tag,
   which may also have installed `379db45` (projects saved on the server);
-  that is not confirmed.
+  that is not confirmed. **Note, 2026-10-18:** confirmed later the same day;
+  see "Projects saved on the server" above.
 - Dev on the Linux box is unchanged: `npm run dev`, port 3000. The container
   never binds 3000 on the host.
 - Image built from `deploy/docker/Dockerfile`; the root Dockerfile was removed
